@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>管理者画面 | ポケカ大会管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              900: '#0a0e1a',
+              800: '#0f1629',
+              700: '#161e3a',
+              600: '#1e2a4a',
+            },
+          },
+        },
+      },
+    }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/static/js/config.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+<body class="min-h-screen text-white" style="background-color:#0a0e1a;">
+
+  <!-- ===== HEADER ===== -->
+  <header
+    x-data="{ open: false }"
+    class="sticky top-0 z-50 shadow-lg"
+    style="background-color:#0f1629; border-bottom:2px solid #dc2626;"
+  >
+    <div class="flex items-center justify-between px-4 py-3">
+      <a href="/static/index.html" class="text-xl font-black tracking-tight" style="color:#fbbf24;">
+        ポケカ大会管理
+      </a>
+      <button
+        @click="open = !open"
+        class="p-2 rounded-lg focus:outline-none"
+        style="color:#fbbf24;"
+        aria-label="メニューを開く"
+      >
+        <svg x-show="!open" xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+        <svg x-show="open" x-cloak xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <nav
+      x-show="open"
+      x-cloak
+      x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="opacity-0 -translate-y-2"
+      x-transition:enter-end="opacity-100 translate-y-0"
+      x-transition:leave="transition ease-in duration-150"
+      x-transition:leave-start="opacity-100 translate-y-0"
+      x-transition:leave-end="opacity-0 -translate-y-2"
+      @click.outside="open = false"
+      class="border-t"
+      style="background-color:#161e3a; border-color:#1e2a4a;"
+    >
+      <ul class="py-1">
+        <template x-for="item in [
+          { label: 'ランキング',     href: '/static/index.html' },
+          { label: 'メンバー登録',   href: '/static/member.html' },
+          { label: 'シティリーグ',   href: '/static/city.html' },
+          { label: 'トレリ',         href: '/static/trainer.html' },
+          { label: 'CL記録',         href: '/static/cl.html' },
+          { label: 'カレンダー',     href: '/static/calendar.html' },
+          { label: '管理者',         href: '/static/admin.html' },
+        ]" :key="item.href">
+          <li>
+            <a
+              :href="item.href"
+              @click="open = false"
+              class="block px-6 py-3 text-sm font-medium border-l-4 border-transparent transition-all"
+              style="color:#e2e8f0;"
+              onmouseover="this.style.borderLeftColor='#dc2626'; this.style.backgroundColor='#1e2a4a';"
+              onmouseout="this.style.borderLeftColor='transparent'; this.style.backgroundColor='';"
+              x-text="item.label"
+            ></a>
+          </li>
+        </template>
+      </ul>
+    </nav>
+  </header>
+
+  <!-- ===== MAIN ===== -->
+  <main
+    x-data="adminApp()"
+    class="max-w-2xl mx-auto px-4 py-6 space-y-6"
+  >
+
+    <!-- セクションタイトル -->
+    <div class="flex items-center gap-3 mb-2">
+      <div class="w-1 h-7 rounded-full" style="background-color:#dc2626;"></div>
+      <h2 class="text-lg font-bold tracking-wide" style="color:#fbbf24;">管理者画面</h2>
+    </div>
+
+    <!-- ===== ログインエリア ===== -->
+    <div class="rounded-xl p-5" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+      <h3 class="text-base font-bold mb-4" style="color:#fbbf24;">管理者ログイン</h3>
+
+      <div x-show="!loggedIn">
+        <div class="flex gap-3">
+          <input
+            type="password"
+            x-model="passwordInput"
+            @keydown.enter="login()"
+            placeholder="パスワードを入力"
+            class="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2"
+            style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9; focus-ring-color:#dc2626;"
+          />
+          <button
+            @click="login()"
+            class="px-5 py-2 rounded-lg text-sm font-bold transition-colors"
+            style="background-color:#dc2626; color:#fff;"
+            onmouseover="this.style.backgroundColor='#b91c1c';"
+            onmouseout="this.style.backgroundColor='#dc2626';"
+          >ログイン</button>
+        </div>
+        <p x-show="loginError" x-cloak class="mt-2 text-sm font-medium" style="color:#f87171;"
+          x-text="loginError"></p>
+      </div>
+
+      <div x-show="loggedIn" x-cloak class="flex items-center justify-between">
+        <span class="text-sm" style="color:#4ade80;">✓ ログイン済み</span>
+        <button
+          @click="logout()"
+          class="text-xs px-3 py-1 rounded-lg"
+          style="background-color:#1e2a4a; color:#94a3b8;"
+          onmouseover="this.style.backgroundColor='#374151';"
+          onmouseout="this.style.backgroundColor='#1e2a4a';"
+        >ログアウト</button>
+      </div>
+    </div>
+
+    <!-- ===== シーズン管理（ログイン後） ===== -->
+    <div x-show="loggedIn" x-cloak class="rounded-xl p-5 space-y-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+      <div class="flex items-center gap-2 mb-1">
+        <div class="w-1 h-5 rounded-full" style="background-color:#dc2626;"></div>
+        <h3 class="text-base font-bold" style="color:#fbbf24;">シーズン管理</h3>
+      </div>
+
+      <!-- 登録済みシーズン一覧 -->
+      <div>
+        <p class="text-xs mb-2" style="color:#64748b;">登録済みシーズン</p>
+        <div x-show="seasonsLoading" class="text-sm py-3 text-center" style="color:#64748b;">読み込み中...</div>
+        <div x-show="!seasonsLoading && seasons.length === 0" class="text-sm py-3 text-center" style="color:#64748b;">シーズンがありません</div>
+        <div x-show="!seasonsLoading && seasons.length > 0" class="space-y-2">
+          <template x-for="s in seasons" :key="s.id">
+            <div class="flex items-center justify-between rounded-lg px-4 py-2" style="background-color:#0f1629; border:1px solid #1e2a4a;">
+              <div>
+                <span class="text-sm font-semibold" style="color:#f1f5f9;" x-text="s.name"></span>
+                <span class="ml-2 text-xs" style="color:#64748b;" x-text="'(' + s.year + ' S' + s.season_number + ')'"></span>
+              </div>
+              <button
+                @click="deleteSeason(s.id)"
+                class="text-xs px-3 py-1 rounded-lg font-medium transition-colors"
+                style="background-color:#7f1d1d; color:#fca5a5;"
+                onmouseover="this.style.backgroundColor='#991b1b';"
+                onmouseout="this.style.backgroundColor='#7f1d1d';"
+              >削除</button>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- シーズン追加フォーム -->
+      <div class="rounded-lg p-4 space-y-3" style="background-color:#0f1629; border:1px solid #1e2a4a;">
+        <p class="text-xs font-semibold" style="color:#94a3b8;">シーズン追加</p>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs mb-1 block" style="color:#64748b;">年度</label>
+            <input
+              type="number"
+              x-model.number="newSeason.year"
+              placeholder="2026"
+              class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2"
+              style="background-color:#161e3a; border:1px solid #1e2a4a; color:#f1f5f9;"
+            />
+          </div>
+          <div>
+            <label class="text-xs mb-1 block" style="color:#64748b;">シーズン番号（1〜4）</label>
+            <select
+              x-model.number="newSeason.season_number"
+              class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2"
+              style="background-color:#161e3a; border:1px solid #1e2a4a; color:#f1f5f9;"
+            >
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs mb-1 block" style="color:#64748b;">表示名（例：2026 S1）</label>
+          <input
+            type="text"
+            x-model="newSeason.name"
+            placeholder="2026 S1"
+            class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2"
+            style="background-color:#161e3a; border:1px solid #1e2a4a; color:#f1f5f9;"
+          />
+        </div>
+        <button
+          @click="addSeason()"
+          :disabled="seasonSaving"
+          class="w-full py-2 rounded-lg text-sm font-bold transition-colors"
+          style="background-color:#dc2626; color:#fff;"
+          onmouseover="this.style.backgroundColor='#b91c1c';"
+          onmouseout="this.style.backgroundColor='#dc2626';"
+        >
+          <span x-text="seasonSaving ? '追加中...' : '追加'"></span>
+        </button>
+        <p x-show="seasonMsg" x-cloak class="text-xs font-medium" :style="seasonMsgOk ? 'color:#4ade80;' : 'color:#f87171;'" x-text="seasonMsg"></p>
+      </div>
+    </div>
+
+    <!-- ===== メンバー管理（ログイン後） ===== -->
+    <div x-show="loggedIn" x-cloak class="rounded-xl p-5 space-y-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+      <div class="flex items-center gap-2 mb-1">
+        <div class="w-1 h-5 rounded-full" style="background-color:#dc2626;"></div>
+        <h3 class="text-base font-bold" style="color:#fbbf24;">メンバー管理</h3>
+      </div>
+
+      <div x-show="membersLoading" class="text-sm py-3 text-center" style="color:#64748b;">読み込み中...</div>
+      <div x-show="!membersLoading && members.length === 0" class="text-sm py-3 text-center" style="color:#64748b;">メンバーがいません</div>
+
+      <div x-show="!membersLoading" class="space-y-2">
+        <template x-for="m in members" :key="m.id">
+          <div class="rounded-lg px-4 py-3" style="background-color:#0f1629; border:1px solid #1e2a4a;">
+
+            <!-- 通常表示 -->
+            <div x-show="editingMemberId !== m.id">
+              <!-- 名前 + 編集/削除ボタン -->
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-medium" style="color:#f1f5f9;" x-text="m.name"></span>
+                <div class="flex gap-2">
+                  <button
+                    @click="startEdit(m)"
+                    class="text-xs px-3 py-1 rounded-lg font-medium transition-colors"
+                    style="background-color:#1e3a5f; color:#93c5fd;"
+                    onmouseover="this.style.backgroundColor='#1e40af';"
+                    onmouseout="this.style.backgroundColor='#1e3a5f';"
+                  >名前編集</button>
+                  <button
+                    @click="deleteMember(m.id)"
+                    class="text-xs px-3 py-1 rounded-lg font-medium transition-colors"
+                    style="background-color:#7f1d1d; color:#fca5a5;"
+                    onmouseover="this.style.backgroundColor='#991b1b';"
+                    onmouseout="this.style.backgroundColor='#7f1d1d';"
+                  >削除</button>
+                </div>
+              </div>
+
+              <!-- 出場権トグル -->
+              <div class="flex flex-wrap gap-2">
+                <!-- WCS -->
+                <button
+                  @click="toggleRight(m, 'has_wcs_right')"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                  :style="m.has_wcs_right
+                    ? 'background-color:#2e1065; border:1px solid #7c3aed; color:#c4b5fd;'
+                    : 'background-color:#161e3a; border:1px solid #1e2a4a; color:#475569;'"
+                >
+                  <span>👑🌍</span>
+                  <span>WCS</span>
+                  <span x-text="m.has_wcs_right ? 'ON' : 'OFF'"></span>
+                </button>
+
+                <!-- JCS -->
+                <button
+                  @click="toggleRight(m, 'has_jcs_right')"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                  :style="m.has_jcs_right
+                    ? 'background-color:#1e3a8a; border:1px solid #1d4ed8; color:#93c5fd;'
+                    : 'background-color:#161e3a; border:1px solid #1e2a4a; color:#475569;'"
+                >
+                  <span>👑🇯🇵</span>
+                  <span>JCS</span>
+                  <span x-text="m.has_jcs_right ? 'ON' : 'OFF'"></span>
+                </button>
+
+                <!-- 次回CL -->
+                <button
+                  @click="toggleRight(m, 'has_cl_right')"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                  :style="m.has_cl_right
+                    ? 'background-color:#064e3b; border:1px solid #065f46; color:#6ee7b7;'
+                    : 'background-color:#161e3a; border:1px solid #1e2a4a; color:#475569;'"
+                >
+                  <span>👑🎯</span>
+                  <span>次回CL</span>
+                  <span x-text="m.has_cl_right ? 'ON' : 'OFF'"></span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 編集中 -->
+            <div x-show="editingMemberId === m.id" x-cloak class="space-y-2">
+              <input
+                type="text"
+                x-model="editingName"
+                @keydown.enter="saveMember(m.id)"
+                @keydown.escape="cancelEdit()"
+                class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2"
+                style="background-color:#161e3a; border:1px solid #1e2a4a; color:#f1f5f9;"
+              />
+              <div class="flex gap-2">
+                <button
+                  @click="saveMember(m.id)"
+                  class="flex-1 py-1.5 rounded-lg text-xs font-bold"
+                  style="background-color:#dc2626; color:#fff;"
+                  onmouseover="this.style.backgroundColor='#b91c1c';"
+                  onmouseout="this.style.backgroundColor='#dc2626';"
+                >保存</button>
+                <button
+                  @click="cancelEdit()"
+                  class="flex-1 py-1.5 rounded-lg text-xs font-bold"
+                  style="background-color:#1e2a4a; color:#94a3b8;"
+                  onmouseover="this.style.backgroundColor='#374151';"
+                  onmouseout="this.style.backgroundColor='#1e2a4a';"
+                >キャンセル</button>
+              </div>
+            </div>
+
+          </div>
+        </template>
+      </div>
+
+      <p x-show="memberMsg" x-cloak class="text-xs font-medium" :style="memberMsgOk ? 'color:#4ade80;' : 'color:#f87171;'" x-text="memberMsg"></p>
+    </div>
+
+  </main>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="mt-10 py-6 px-4 text-center border-t" style="border-color:#1e2a4a;">
+    <p class="text-xs leading-relaxed" style="color:#64748b;">
+      ※ ランキングはコミュニティ内の順位です。全国順位とは異なります。
+    </p>
+  </footer>
+
+  <script>
+    function adminApp() {
+      return {
+        // ログイン状態（ページ内変数のみ）
+        loggedIn: false,
+        passwordInput: '',
+        adminPassword: '',
+        loginError: '',
+
+        // シーズン
+        seasons: [],
+        seasonsLoading: false,
+        newSeason: { year: new Date().getFullYear(), season_number: 1, name: '' },
+        seasonSaving: false,
+        seasonMsg: '',
+        seasonMsgOk: false,
+
+        // メンバー
+        members: [],
+        membersLoading: false,
+        editingMemberId: null,
+        editingName: '',
+        memberMsg: '',
+        memberMsgOk: false,
+
+        login() {
+          if (!this.passwordInput) {
+            this.loginError = 'パスワードを入力してください';
+            return;
+          }
+          // パスワードの正誤はAPIで判定するため、一時的にログイン試行
+          this.adminPassword = this.passwordInput;
+          this.loginError = '';
+          this.verifyAndLogin();
+        },
+
+        async verifyAndLogin() {
+          try {
+            // seasons POSTでパスワード確認（ダミーリクエストで検証）
+            // シンプルに seasons GET → ログイン成功として、実際のAPI呼び出し時にエラーを出す方式
+            // ただし要件定義では /api/admin/login エンドポイントが存在する
+            const res = await fetch(`${API_BASE}/api/admin/login`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ admin_password: this.adminPassword }),
+            });
+            if (res.ok) {
+              this.loggedIn = true;
+              this.passwordInput = '';
+              this.loginError = '';
+              await this.fetchSeasons();
+              await this.fetchMembers();
+            } else {
+              this.loginError = 'パスワードが違います';
+              this.adminPassword = '';
+            }
+          } catch (e) {
+            // /api/admin/login が未実装の場合は seasons API で確認
+            await this.loginFallback();
+          }
+        },
+
+        async loginFallback() {
+          // /api/admin/login が未実装の場合、seasons POSTの403判定で確認
+          try {
+            const res = await fetch(`${API_BASE}/api/seasons`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                year: 0, season_number: 1, name: '_check_',
+                admin_password: this.adminPassword,
+              }),
+            });
+            if (res.status === 403) {
+              this.loginError = 'パスワードが違います';
+              this.adminPassword = '';
+            } else {
+              // 201 or 400（重複）= パスワード正しい
+              this.loggedIn = true;
+              this.passwordInput = '';
+              this.loginError = '';
+              await this.fetchSeasons();
+              await this.fetchMembers();
+            }
+          } catch (e) {
+            this.loginError = 'サーバーに接続できません';
+            this.adminPassword = '';
+          }
+        },
+
+        logout() {
+          this.loggedIn = false;
+          this.adminPassword = '';
+          this.passwordInput = '';
+          this.seasons = [];
+          this.members = [];
+          this.seasonMsg = '';
+          this.memberMsg = '';
+          this.editingMemberId = null;
+        },
+
+        // ---- シーズン ----
+
+        async fetchSeasons() {
+          this.seasonsLoading = true;
+          try {
+            const res = await fetch(`${API_BASE}/api/seasons`);
+            this.seasons = await res.json();
+          } catch (e) {
+            console.error('シーズン取得エラー:', e);
+          } finally {
+            this.seasonsLoading = false;
+          }
+        },
+
+        async addSeason() {
+          if (!this.newSeason.year || !this.newSeason.name.trim()) {
+            this.showSeasonMsg('年度と表示名を入力してください', false);
+            return;
+          }
+          this.seasonSaving = true;
+          try {
+            const res = await fetch(`${API_BASE}/api/seasons`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                year: this.newSeason.year,
+                season_number: this.newSeason.season_number,
+                name: this.newSeason.name.trim(),
+                admin_password: this.adminPassword,
+              }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+              this.showSeasonMsg('シーズンを追加しました', true);
+              this.newSeason.name = '';
+              await this.fetchSeasons();
+            } else {
+              this.showSeasonMsg(data.detail || '追加に失敗しました', false);
+            }
+          } catch (e) {
+            this.showSeasonMsg('サーバーエラー', false);
+          } finally {
+            this.seasonSaving = false;
+          }
+        },
+
+        async deleteSeason(id) {
+          if (!confirm('このシーズンを削除しますか？')) return;
+          try {
+            const res = await fetch(`${API_BASE}/api/seasons/${id}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ admin_password: this.adminPassword }),
+            });
+            if (res.ok) {
+              this.showSeasonMsg('削除しました', true);
+              await this.fetchSeasons();
+            } else {
+              const data = await res.json();
+              this.showSeasonMsg(data.detail || '削除に失敗しました', false);
+            }
+          } catch (e) {
+            this.showSeasonMsg('サーバーエラー', false);
+          }
+        },
+
+        showSeasonMsg(msg, ok) {
+          this.seasonMsg = msg;
+          this.seasonMsgOk = ok;
+          setTimeout(() => { this.seasonMsg = ''; }, 3000);
+        },
+
+        // ---- メンバー ----
+
+        async fetchMembers() {
+          this.membersLoading = true;
+          try {
+            const res = await fetch(`${API_BASE}/api/members`);
+            this.members = await res.json();
+          } catch (e) {
+            console.error('メンバー取得エラー:', e);
+          } finally {
+            this.membersLoading = false;
+          }
+        },
+
+        startEdit(m) {
+          this.editingMemberId = m.id;
+          this.editingName = m.name;
+          this.memberMsg = '';
+        },
+
+        cancelEdit() {
+          this.editingMemberId = null;
+          this.editingName = '';
+        },
+
+        async saveMember(id) {
+          if (!this.editingName.trim()) {
+            this.showMemberMsg('名前を入力してください', false);
+            return;
+          }
+          try {
+            const res = await fetch(`${API_BASE}/api/members/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: this.editingName.trim(),
+                admin_password: this.adminPassword,
+              }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+              this.showMemberMsg('更新しました', true);
+              this.cancelEdit();
+              await this.fetchMembers();
+            } else {
+              this.showMemberMsg(data.detail || '更新に失敗しました', false);
+            }
+          } catch (e) {
+            this.showMemberMsg('サーバーエラー', false);
+          }
+        },
+
+        async deleteMember(id) {
+          if (!confirm('このメンバーを削除しますか？\n関連するすべての記録も削除されます。')) return;
+          try {
+            const res = await fetch(`${API_BASE}/api/members/${id}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ admin_password: this.adminPassword }),
+            });
+            if (res.ok) {
+              this.showMemberMsg('削除しました', true);
+              await this.fetchMembers();
+            } else {
+              const data = await res.json();
+              this.showMemberMsg(data.detail || '削除に失敗しました', false);
+            }
+          } catch (e) {
+            this.showMemberMsg('サーバーエラー', false);
+          }
+        },
+
+        showMemberMsg(msg, ok) {
+          this.memberMsg = msg;
+          this.memberMsgOk = ok;
+          setTimeout(() => { this.memberMsg = ''; }, 3000);
+        },
+
+        async toggleRight(member, field) {
+          const newVal = member[field] ? 0 : 1;
+          const body = { admin_password: this.adminPassword };
+          body[field] = newVal;
+          try {
+            const res = await fetch(`${API_BASE}/api/members/${member.id}/rights`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              member[field] = data[field];
+            } else {
+              const data = await res.json();
+              this.showMemberMsg(data.detail || '更新に失敗しました', false);
+            }
+          } catch (e) {
+            this.showMemberMsg('サーバーエラー', false);
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

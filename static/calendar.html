@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>カレンダー | ポケカ大会管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              900: '#0a0e1a',
+              800: '#0f1629',
+              700: '#161e3a',
+              600: '#1e2a4a',
+            },
+          },
+        },
+      },
+    }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/static/js/config.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+<body class="min-h-screen text-white" style="background-color:#0a0e1a;">
+
+  <!-- ===== HEADER ===== -->
+  <header
+    x-data="{ open: false }"
+    class="sticky top-0 z-50 shadow-lg"
+    style="background-color:#0f1629; border-bottom:2px solid #dc2626;"
+  >
+    <div class="flex items-center justify-between px-4 py-3">
+      <a href="/static/index.html" class="text-xl font-black tracking-tight" style="color:#fbbf24;">
+        ポケカ大会管理
+      </a>
+      <button
+        @click="open = !open"
+        class="p-2 rounded-lg focus:outline-none"
+        style="color:#fbbf24;"
+        aria-label="メニューを開く"
+      >
+        <svg x-show="!open" xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+        <svg x-show="open" x-cloak xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <nav
+      x-show="open"
+      x-cloak
+      x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="opacity-0 -translate-y-2"
+      x-transition:enter-end="opacity-100 translate-y-0"
+      x-transition:leave="transition ease-in duration-150"
+      x-transition:leave-start="opacity-100 translate-y-0"
+      x-transition:leave-end="opacity-0 -translate-y-2"
+      @click.outside="open = false"
+      class="border-t"
+      style="background-color:#161e3a; border-color:#1e2a4a;"
+    >
+      <ul class="py-1">
+        <template x-for="item in [
+          { label: 'ランキング',     href: '/static/index.html' },
+          { label: 'メンバー登録',   href: '/static/member.html' },
+          { label: 'シティリーグ',   href: '/static/city.html' },
+          { label: 'トレリ',         href: '/static/trainer.html' },
+          { label: 'CL記録',         href: '/static/cl.html' },
+          { label: 'カレンダー',     href: '/static/calendar.html' },
+          { label: '管理者',         href: '/static/admin.html' },
+        ]" :key="item.href">
+          <li>
+            <a
+              :href="item.href"
+              @click="open = false"
+              class="block px-6 py-3 text-sm font-medium border-l-4 border-transparent transition-all"
+              style="color:#e2e8f0;"
+              onmouseover="this.style.borderLeftColor='#dc2626'; this.style.backgroundColor='#1e2a4a';"
+              onmouseout="this.style.borderLeftColor='transparent'; this.style.backgroundColor='';"
+              x-text="item.label"
+            ></a>
+          </li>
+        </template>
+      </ul>
+    </nav>
+  </header>
+
+  <!-- ===== MAIN ===== -->
+  <main
+    x-data="calendarApp()"
+    x-init="init()"
+    class="max-w-2xl mx-auto px-4 py-6"
+  >
+
+    <!-- セクションタイトル -->
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-1 h-7 rounded-full" style="background-color:#dc2626;"></div>
+      <h2 class="text-lg font-bold tracking-wide" style="color:#fbbf24;">参加カレンダー</h2>
+    </div>
+
+    <!-- 月切り替え -->
+    <div class="flex items-center justify-between mb-4 rounded-xl px-3 py-2.5" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+      <button
+        @click="prevMonth()"
+        class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-bold transition-opacity hover:opacity-75 active:opacity-60"
+        style="background-color:#1e2a4a; color:#e2e8f0;"
+      >
+        ← 前月
+      </button>
+
+      <div class="flex items-center gap-2">
+        <span class="text-base font-black tabular-nums" style="color:#fbbf24;" x-text="monthTitle"></span>
+        <button
+          @click="goToday()"
+          class="text-xs px-2 py-0.5 rounded font-bold transition-opacity hover:opacity-75"
+          style="background-color:#dc2626; color:#fff;"
+        >
+          今月
+        </button>
+      </div>
+
+      <button
+        @click="nextMonth()"
+        class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-bold transition-opacity hover:opacity-75 active:opacity-60"
+        style="background-color:#1e2a4a; color:#e2e8f0;"
+      >
+        次月 →
+      </button>
+    </div>
+
+    <!-- ローディング -->
+    <div x-show="loading" x-cloak class="flex flex-col items-center justify-center py-16 gap-4">
+      <svg class="animate-spin w-10 h-10" style="color:#dc2626;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>
+      <span class="text-sm" style="color:#94a3b8;">読み込み中...</span>
+    </div>
+
+    <!-- カレンダー本体 -->
+    <div x-show="!loading" x-cloak>
+
+      <!-- 曜日ヘッダー -->
+      <div class="grid grid-cols-7 mb-1">
+        <template x-for="(dow, i) in ['日','月','火','水','木','金','土']" :key="i">
+          <div
+            class="text-center text-xs font-bold py-1.5"
+            :style="i === 0 ? 'color:#f87171;' : i === 6 ? 'color:#93c5fd;' : 'color:#64748b;'"
+            x-text="dow"
+          ></div>
+        </template>
+      </div>
+
+      <!-- カレンダーグリッド -->
+      <div class="grid grid-cols-7 gap-0.5">
+        <template x-for="(cell, idx) in calendarDays" :key="idx">
+          <div
+            @click="cell.date && selectDate(cell.date)"
+            class="rounded-lg p-1 flex flex-col transition-colors"
+            style="min-height:76px;"
+            :style="cellStyle(cell, idx)"
+          >
+            <!-- 日付番号 -->
+            <div
+              x-show="cell.day !== null"
+              class="text-xs font-bold mb-0.5 w-5 h-5 flex items-center justify-center rounded-full flex-shrink-0 self-start"
+              :style="isToday(cell.date)
+                ? 'background-color:#dc2626; color:#fff;'
+                : (idx % 7 === 0 ? 'color:#f87171;' : idx % 7 === 6 ? 'color:#93c5fd;' : 'color:#cbd5e1;')"
+              x-text="cell.day"
+            ></div>
+
+            <!-- メンバー名チップ -->
+            <div class="flex flex-col gap-0.5 flex-1 overflow-hidden">
+              <template x-for="entry in getEntriesForDate(cell.date)" :key="entry.id">
+                <div
+                  class="text-xs px-1 py-0.5 rounded truncate leading-tight flex items-center gap-0.5"
+                  :style="entry.is_absent
+                    ? 'background-color:#1f2937; color:#6b7280;'
+                    : (entry.rank != null ? 'background-color:#064e3b; color:#6ee7b7;' : 'background-color:#1e3a5f; color:#93c5fd;')"
+                >
+                  <span x-show="entry.rank != null && !entry.is_absent" class="flex-shrink-0">✅</span>
+                  <span class="truncate" x-text="getMemberName(entry.member_id)"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- 日付詳細パネル -->
+    <div
+      x-show="selectedDate && !loading"
+      x-cloak
+      x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="opacity-0 translate-y-2"
+      x-transition:enter-end="opacity-100 translate-y-0"
+      class="mt-4 rounded-xl overflow-hidden"
+      style="border:1px solid #fbbf24;"
+    >
+      <div class="px-4 py-3 flex items-center justify-between" style="background-color:#2a1a00;">
+        <div class="flex items-center gap-2">
+          <div class="w-1 h-5 rounded-full" style="background-color:#fbbf24;"></div>
+          <span class="font-bold text-sm" style="color:#fbbf24;" x-text="selectedDate + ' の参加情報'"></span>
+        </div>
+        <button
+          @click="selectedDate = null"
+          class="text-xs px-2 py-0.5 rounded transition-opacity hover:opacity-75"
+          style="background-color:#374151; color:#9ca3af;"
+        >✕ 閉じる</button>
+      </div>
+
+      <div class="p-4 space-y-2" style="background-color:#161e3a;">
+        <!-- データなし -->
+        <div x-show="selectedDateEntries().length === 0" class="text-center py-4">
+          <p class="text-sm" style="color:#64748b;">この日のエントリーはありません</p>
+        </div>
+
+        <!-- エントリー一覧 -->
+        <template x-for="entry in selectedDateEntries()" :key="entry.id">
+          <div
+            class="rounded-lg overflow-hidden"
+            :style="entry.is_absent
+              ? 'border:1px solid #374151;'
+              : (entry.rank != null ? 'border:1px solid #065f46;' : 'border:1px solid #1e3a5f;')"
+          >
+            <!-- ヘッダー行：名前 + ステータスバッジ -->
+            <div
+              class="flex items-center justify-between px-3 py-2.5"
+              :style="entry.is_absent
+                ? 'background-color:#1f2937;'
+                : (entry.rank != null ? 'background-color:#052e16;' : 'background-color:#0c1f3e;')"
+            >
+              <div class="flex items-center gap-2 flex-1 min-w-0">
+                <span x-show="!entry.is_absent && entry.rank != null" class="flex-shrink-0 text-sm">✅</span>
+                <p
+                  class="font-semibold text-sm truncate"
+                  :style="entry.is_absent ? 'color:#9ca3af;' : 'color:#f1f5f9;'"
+                  x-text="getMemberName(entry.member_id)"
+                ></p>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0 ml-2">
+                <span class="text-xs" style="color:#64748b;" x-text="entry.venue || '会場未定'"></span>
+                <span
+                  class="text-xs px-2 py-0.5 rounded font-bold"
+                  :style="entry.is_absent
+                    ? 'background-color:#374151; color:#9ca3af;'
+                    : (entry.rank != null ? 'background-color:#065f46; color:#6ee7b7;' : 'background-color:#1e3a5f; color:#93c5fd;')"
+                  x-text="entry.is_absent ? '不参加' : (entry.rank != null ? '結果あり' : '参加予定')"
+                ></span>
+              </div>
+            </div>
+
+            <!-- 結果詳細（rank ありかつ不参加でない場合） -->
+            <div
+              x-show="!entry.is_absent && entry.rank != null"
+              class="px-3 py-2.5 space-y-2"
+              style="background-color:#0f1629;"
+            >
+              <!-- 順位・CSP行 -->
+              <div class="flex items-center gap-3">
+                <div class="flex-1 rounded-lg p-2 text-center" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+                  <p class="text-xs mb-0.5" style="color:#64748b;">順位</p>
+                  <p class="text-lg font-black tabular-nums" style="color:#fbbf24;" x-text="entry.rank + '位'"></p>
+                </div>
+                <div class="flex-1 rounded-lg p-2 text-center" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+                  <p class="text-xs mb-0.5" style="color:#64748b;">獲得CSP</p>
+                  <p
+                    class="text-lg font-black tabular-nums"
+                    :style="(entry.csp_earned > 0) ? 'color:#4ade80;' : 'color:#475569;'"
+                    x-text="(entry.csp_earned > 0 ? '+' : '') + (entry.csp_earned || 0) + 'pt'"
+                  ></p>
+                </div>
+              </div>
+
+              <!-- デッキコード（入力時のみ） -->
+              <div
+                x-show="entry.deck_code"
+                class="flex items-center gap-2 rounded-lg px-3 py-2"
+                style="background-color:#161e3a; border:1px solid #1e2a4a;"
+              >
+                <span class="text-xs flex-shrink-0" style="color:#64748b;">デッキ</span>
+                <span class="text-xs font-mono font-semibold" style="color:#7dd3fc;" x-text="entry.deck_code"></span>
+              </div>
+
+              <!-- 詳細を見るリンク -->
+              <a
+                :href="'/static/member_detail.html?id=' + entry.member_id"
+                class="flex items-center justify-center gap-1.5 w-full rounded-lg py-2 text-xs font-bold transition-opacity hover:opacity-75"
+                style="background-color:#1e2a4a; color:#fbbf24; border:1px solid #f59e0b;"
+              >
+                <span>詳細を見る</span>
+                <span>→</span>
+              </a>
+            </div>
+
+            <!-- 結果未入力（参加予定・結果なし） -->
+            <div
+              x-show="!entry.is_absent && entry.rank == null"
+              class="px-3 py-2"
+              style="background-color:#0f1629;"
+            >
+              <p class="text-xs" style="color:#64748b;">結果未入力</p>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- 凡例 -->
+    <div class="mt-4 rounded-xl px-4 py-3" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+      <p class="text-xs font-bold mb-2" style="color:#64748b;">凡例</p>
+      <div class="flex flex-wrap items-center gap-4">
+        <div class="flex items-center gap-1.5">
+          <div class="w-3 h-3 rounded flex-shrink-0" style="background-color:#1e3a5f;"></div>
+          <span class="text-xs" style="color:#93c5fd;">参加予定</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-xs">✅</span>
+          <div class="w-3 h-3 rounded flex-shrink-0" style="background-color:#064e3b;"></div>
+          <span class="text-xs" style="color:#6ee7b7;">結果入力済</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <div class="w-3 h-3 rounded flex-shrink-0" style="background-color:#1f2937;"></div>
+          <span class="text-xs" style="color:#6b7280;">不参加</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <div class="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style="background-color:#dc2626;">
+            <span class="text-xs font-black" style="color:#fff; font-size:9px;">今</span>
+          </div>
+          <span class="text-xs" style="color:#94a3b8;">今日</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <div class="w-4 h-4 rounded flex-shrink-0" style="border:2px solid #fbbf24;"></div>
+          <span class="text-xs" style="color:#fbbf24;">選択中の日</span>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="mt-10 py-6 px-4 text-center border-t" style="border-color:#1e2a4a;">
+    <p class="text-xs leading-relaxed" style="color:#64748b;">
+      ※ ランキングはコミュニティ内の順位です。全国順位とは異なります。
+    </p>
+  </footer>
+
+  <script>
+    function calendarApp() {
+      return {
+        today: new Date(),
+        currentYear: 0,
+        currentMonth: 0,
+        entries: [],
+        members: [],
+        selectedDate: null,
+        loading: true,
+        calendarDays: [],
+
+        init() {
+          const now = new Date();
+          this.currentYear = now.getFullYear();
+          this.currentMonth = now.getMonth();
+          this.fetchData();
+        },
+
+        async fetchData() {
+          this.loading = true;
+          try {
+            const [er, mr] = await Promise.all([
+              fetch(`${API_BASE}/api/city`),
+              fetch(`${API_BASE}/api/members`),
+            ]);
+            if (er.ok) this.entries = await er.json();
+            if (mr.ok) this.members = await mr.json();
+          } catch (e) {
+            console.error('データ取得エラー:', e);
+            this.entries = [];
+            this.members = [];
+          } finally {
+            this.loading = false;
+            this.buildCalendar();
+          }
+        },
+
+        buildCalendar() {
+          const y = this.currentYear;
+          const m = this.currentMonth;
+          const firstDOW = new Date(y, m, 1).getDay(); // 0=日
+          const totalDays = new Date(y, m + 1, 0).getDate();
+
+          const days = [];
+          // 月初前の空白セル
+          for (let i = 0; i < firstDOW; i++) {
+            days.push({ date: null, day: null });
+          }
+          // 実際の日付
+          for (let d = 1; d <= totalDays; d++) {
+            days.push({
+              date: `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+              day: d,
+            });
+          }
+          this.calendarDays = days;
+        },
+
+        prevMonth() {
+          if (this.currentMonth === 0) {
+            this.currentMonth = 11;
+            this.currentYear--;
+          } else {
+            this.currentMonth--;
+          }
+          this.selectedDate = null;
+          this.buildCalendar();
+        },
+
+        nextMonth() {
+          if (this.currentMonth === 11) {
+            this.currentMonth = 0;
+            this.currentYear++;
+          } else {
+            this.currentMonth++;
+          }
+          this.selectedDate = null;
+          this.buildCalendar();
+        },
+
+        goToday() {
+          const now = new Date();
+          this.currentYear = now.getFullYear();
+          this.currentMonth = now.getMonth();
+          this.selectedDate = null;
+          this.buildCalendar();
+        },
+
+        selectDate(dateStr) {
+          this.selectedDate = this.selectedDate === dateStr ? null : dateStr;
+        },
+
+        getEntriesForDate(dateStr) {
+          if (!dateStr) return [];
+          return this.entries.filter(e => e.date === dateStr);
+        },
+
+        selectedDateEntries() {
+          return this.selectedDate ? this.getEntriesForDate(this.selectedDate) : [];
+        },
+
+        getMemberName(memberId) {
+          const m = this.members.find(m => m.id == memberId);
+          return m ? m.name : `#${memberId}`;
+        },
+
+        isToday(dateStr) {
+          if (!dateStr) return false;
+          const t = this.today;
+          return dateStr === `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+        },
+
+        get monthTitle() {
+          return `${this.currentYear}年 ${this.currentMonth + 1}月`;
+        },
+
+        cellStyle(cell, idx) {
+          if (!cell.date) {
+            return 'background-color:transparent; pointer-events:none;';
+          }
+
+          const hasEnt = this.getEntriesForDate(cell.date).length > 0;
+          const isSelected = this.selectedDate === cell.date;
+          const isTod = this.isToday(cell.date);
+
+          let bg = '#161e3a';
+          let border = '1px solid #1e2a4a';
+          let cursor = hasEnt ? 'cursor:pointer;' : 'cursor:default;';
+
+          if (isTod) {
+            border = '2px solid #dc2626';
+          }
+          if (isSelected) {
+            bg = '#1e2a4a';
+            border = '2px solid #fbbf24';
+          }
+
+          return `background-color:${bg}; border:${border}; ${cursor}`;
+        },
+      };
+    }
+  </script>
+</body>
+</html>
