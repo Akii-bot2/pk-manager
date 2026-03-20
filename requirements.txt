@@ -4,4 +4,3 @@ sqlalchemy==2.0.40
 aiofiles==24.1.0
 python-multipart==0.0.20
 python-dotenv
-python-dotenv
