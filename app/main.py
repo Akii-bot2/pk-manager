@@ -48,5 +48,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/")
+@app.head("/")
 async def health_check():
     return {"message": "ポケカ管理システム起動中"}
