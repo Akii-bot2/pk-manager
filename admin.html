@@ -163,13 +163,30 @@
           <div class="rounded-lg px-4 py-3" style="background-color:#0f1629; border:1px solid #1e2a4a;">
 
             <!-- 通常表示 -->
-            <div x-show="editingMemberId !== m.id" class="flex items-center justify-between">
-              <span class="text-sm font-medium" style="color:#f1f5f9;" x-text="m.name"></span>
+            <div x-show="editingMemberId !== m.id">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium" style="color:#f1f5f9;" x-text="m.name"></span>
+                <div class="flex gap-2">
+                  <button @click="startEdit(m)" class="text-xs px-3 py-1 rounded-lg font-medium"
+                    style="background-color:#1e3a5f; color:#93c5fd;">名前編集</button>
+                  <button @click="deleteMember(m.id)" class="text-xs px-3 py-1 rounded-lg font-medium"
+                    style="background-color:#7f1d1d; color:#fca5a5;">削除</button>
+                </div>
+              </div>
+              <!-- バッジ管理 -->
               <div class="flex gap-2">
-                <button @click="startEdit(m)" class="text-xs px-3 py-1 rounded-lg font-medium"
-                  style="background-color:#1e3a5f; color:#93c5fd;">名前編集</button>
-                <button @click="deleteMember(m.id)" class="text-xs px-3 py-1 rounded-lg font-medium"
-                  style="background-color:#7f1d1d; color:#fca5a5;">削除</button>
+                <button @click="toggleMark(m, 'WCS')"
+                  class="text-xs px-2 py-0.5 rounded font-bold transition-opacity hover:opacity-80"
+                  :style="hasMark(m, 'WCS') ? 'background-color:#7c3aed; color:#fff;' : 'background-color:#1e2a4a; color:#64748b;'">
+                  🏆🌍 WCS</button>
+                <button @click="toggleMark(m, 'JCS')"
+                  class="text-xs px-2 py-0.5 rounded font-bold transition-opacity hover:opacity-80"
+                  :style="hasMark(m, 'JCS') ? 'background-color:#dc2626; color:#fff;' : 'background-color:#1e2a4a; color:#64748b;'">
+                  🏆🇯🇵 JCS</button>
+                <button @click="toggleMark(m, 'CL')"
+                  class="text-xs px-2 py-0.5 rounded font-bold transition-opacity hover:opacity-80"
+                  :style="hasMark(m, 'CL') ? 'background-color:#0369a1; color:#fff;' : 'background-color:#1e2a4a; color:#64748b;'">
+                  🏆🎯 CL</button>
               </div>
             </div>
 
@@ -352,6 +369,29 @@
           this.memberMsg = msg;
           this.memberMsgOk = ok;
           setTimeout(() => { this.memberMsg = ''; }, 3000);
+        },
+
+        hasMark(m, mark) {
+          return m.marks ? m.marks.split(',').includes(mark) : false;
+        },
+
+        async toggleMark(m, mark) {
+          const current = m.marks ? m.marks.split(',').filter(Boolean) : [];
+          const newMarks = current.includes(mark)
+            ? current.filter(x => x !== mark)
+            : [...current, mark];
+          try {
+            await gasPost({
+              action: 'updateMemberMarks',
+              admin_password: this.adminPassword,
+              id: m.id,
+              marks: newMarks.join(','),
+            });
+            m.marks = newMarks.join(',');
+            this.showMemberMsg((newMarks.includes(mark) ? '付与' : '削除') + 'しました: ' + mark, true);
+          } catch (e) {
+            this.showMemberMsg(e.message || 'バッジ更新に失敗しました', false);
+          }
         },
       };
     }
