@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSPランキング | ポケカ大会管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="./js/api.js"></script>
+  <style>[x-cloak] { display: none !important; }</style>
+</head>
+<body class="min-h-screen text-white" style="background-color:#0a0e1a;">
+
+  <!-- ===== HEADER ===== -->
+  <header x-data="{ open: false }" class="sticky top-0 z-50 shadow-lg"
+    style="background-color:#0f1629; border-bottom:2px solid #dc2626;">
+    <div class="flex items-center justify-between px-4 py-3">
+      <a href="./index.html" class="text-xl font-black tracking-tight" style="color:#fbbf24;">ポケカ大会管理</a>
+      <button @click="open = !open" class="p-2 rounded-lg" style="color:#fbbf24;" aria-label="メニュー">
+        <svg x-show="!open" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <svg x-show="open" x-cloak class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <nav x-show="open" x-cloak x-transition @click.outside="open = false" class="border-t"
+      style="background-color:#161e3a; border-color:#1e2a4a;">
+      <ul class="py-1">
+        <template x-for="item in [
+          { label: 'ランキング', href: './index.html' },
+          { label: 'メンバー登録', href: './member.html' },
+          { label: 'シティリーグ', href: './city.html' },
+          { label: 'トレリ', href: './trainer.html' },
+          { label: 'CL記録', href: './cl.html' },
+          { label: 'カレンダー', href: './calendar.html' },
+          { label: '管理者', href: './admin.html' },
+        ]" :key="item.href">
+          <li><a :href="item.href" @click="open = false"
+            class="block px-6 py-3 text-sm font-medium border-l-4 border-transparent transition-all"
+            style="color:#e2e8f0;"
+            onmouseover="this.style.borderLeftColor='#dc2626';this.style.backgroundColor='#1e2a4a';"
+            onmouseout="this.style.borderLeftColor='transparent';this.style.backgroundColor='';"
+            x-text="item.label"></a></li>
+        </template>
+      </ul>
+    </nav>
+  </header>
+
+  <!-- ===== MAIN ===== -->
+  <main x-data="rankingApp()" x-init="init()" class="max-w-2xl mx-auto px-4 py-6">
+
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-1 h-7 rounded-full" style="background-color:#dc2626;"></div>
+      <h2 class="text-lg font-bold tracking-wide" style="color:#fbbf24;">CSP ランキング</h2>
+    </div>
+
+    <!-- ローディング -->
+    <div x-show="loading" class="flex flex-col items-center justify-center py-16 gap-4">
+      <svg class="animate-spin w-10 h-10" style="color:#dc2626;" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>
+      <span class="text-sm" style="color:#94a3b8;">読み込み中...</span>
+    </div>
+
+    <!-- エラー -->
+    <div x-show="!loading && error" x-cloak class="text-center py-12">
+      <p class="text-sm" style="color:#f87171;" x-text="error"></p>
+    </div>
+
+    <!-- データなし -->
+    <div x-show="!loading && !error && ranking.length === 0" x-cloak class="text-center py-16">
+      <p class="text-base" style="color:#94a3b8;">まだデータがありません</p>
+    </div>
+
+    <!-- ランキングリスト -->
+    <div x-show="!loading && ranking.length > 0" x-cloak class="space-y-3">
+      <template x-for="(item, index) in ranking" :key="item.id">
+        <div
+          :class="index === 0 ? 'rounded-xl p-4 shadow-lg' : 'rounded-xl p-3'"
+          :style="index === 0
+            ? 'background:linear-gradient(135deg,#1e2a4a 0%,#2a1a00 100%); border:2px solid #f59e0b;'
+            : 'background-color:#161e3a; border:1px solid #1e2a4a;'"
+        >
+          <div class="flex items-center gap-3">
+            <!-- 順位バッジ -->
+            <div class="flex-shrink-0 flex items-center justify-center rounded-full font-black"
+              :class="index === 0 ? 'w-11 h-11 text-lg' : 'w-9 h-9 text-sm'"
+              :style="index === 0
+                ? 'background:linear-gradient(135deg,#f59e0b,#fbbf24); color:#0a0e1a;'
+                : index === 1
+                  ? 'background-color:#4b5563; color:#e5e7eb;'
+                  : index === 2
+                    ? 'background-color:#78350f; color:#fcd34d;'
+                    : 'background-color:#1e2a4a; color:#94a3b8;'"
+              x-text="(index + 1) + '位'"
+            ></div>
+
+            <!-- 名前 + バッジ -->
+            <div class="flex-1 min-w-0">
+              <a :href="'./member.html?id=' + item.id"
+                class="block font-semibold truncate"
+                :class="index === 0 ? 'text-lg' : 'text-base'"
+                :style="index === 0 ? 'color:#fbbf24;' : 'color:#f1f5f9;'"
+                x-text="item.name"
+              ></a>
+              <!-- 出場権マーク -->
+              <div class="flex flex-wrap gap-1 mt-1">
+                <span x-show="item.marks.includes('WCS')" x-cloak
+                  class="text-xs px-1.5 py-0.5 rounded font-bold"
+                  style="background-color:#7c3aed; color:#fff;">🏆🌍 WCS</span>
+                <span x-show="item.marks.includes('JCS')" x-cloak
+                  class="text-xs px-1.5 py-0.5 rounded font-bold"
+                  style="background-color:#1d4ed8; color:#fff;">🏆🇯🇵 JCS</span>
+                <span x-show="item.marks.includes('CL')" x-cloak
+                  class="text-xs px-1.5 py-0.5 rounded font-bold"
+                  style="background-color:#065f46; color:#fff;">🏆🎯 次回CL</span>
+              </div>
+            </div>
+
+            <!-- CSP -->
+            <div class="flex-shrink-0 text-right">
+              <span class="font-black tabular-nums"
+                :class="index === 0 ? 'text-2xl' : 'text-xl'"
+                :style="index === 0 ? 'color:#fbbf24;' : 'color:#f1f5f9;'"
+                x-text="item.total_csp"
+              ></span>
+              <span class="block text-xs"
+                :style="index === 0 ? 'color:#fcd34d;' : 'color:#64748b;'">pt</span>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </main>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="mt-10 py-6 px-4 text-center border-t" style="border-color:#1e2a4a;">
+    <p class="text-xs leading-relaxed" style="color:#64748b;">
+      ※ ランキングはコミュニティ内の順位です。全国順位とは異なります。
+    </p>
+  </footer>
+
+  <script>
+    function rankingApp() {
+      return {
+        loading: true,
+        ranking: [],
+        error: '',
+
+        async init() {
+          try {
+            this.ranking = await gasGet('getRanking');
+          } catch (e) {
+            this.error = 'ランキングの取得に失敗しました: ' + e.message;
+          } finally {
+            this.loading = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

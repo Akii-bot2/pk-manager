@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>カレンダー | ポケカ大会管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="./js/api.js"></script>
+  <style>[x-cloak] { display: none !important; }</style>
+</head>
+<body class="min-h-screen text-white" style="background-color:#0a0e1a;">
+
+  <!-- ===== HEADER ===== -->
+  <header x-data="{ open: false }" class="sticky top-0 z-50 shadow-lg"
+    style="background-color:#0f1629; border-bottom:2px solid #dc2626;">
+    <div class="flex items-center justify-between px-4 py-3">
+      <a href="./index.html" class="text-xl font-black tracking-tight" style="color:#fbbf24;">ポケカ大会管理</a>
+      <button @click="open = !open" class="p-2 rounded-lg" style="color:#fbbf24;" aria-label="メニュー">
+        <svg x-show="!open" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <svg x-show="open" x-cloak class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <nav x-show="open" x-cloak x-transition @click.outside="open = false" class="border-t"
+      style="background-color:#161e3a; border-color:#1e2a4a;">
+      <ul class="py-1">
+        <template x-for="item in [
+          { label: 'ランキング', href: './index.html' },
+          { label: 'メンバー登録', href: './member.html' },
+          { label: 'シティリーグ', href: './city.html' },
+          { label: 'トレリ', href: './trainer.html' },
+          { label: 'CL記録', href: './cl.html' },
+          { label: 'カレンダー', href: './calendar.html' },
+          { label: '管理者', href: './admin.html' },
+        ]" :key="item.href">
+          <li><a :href="item.href" @click="open = false"
+            class="block px-6 py-3 text-sm font-medium border-l-4 border-transparent transition-all"
+            style="color:#e2e8f0;"
+            onmouseover="this.style.borderLeftColor='#dc2626';this.style.backgroundColor='#1e2a4a';"
+            onmouseout="this.style.borderLeftColor='transparent';this.style.backgroundColor='';"
+            x-text="item.label"></a></li>
+        </template>
+      </ul>
+    </nav>
+  </header>
+
+  <!-- ===== MAIN ===== -->
+  <main x-data="calendarApp()" x-init="init()" class="max-w-2xl mx-auto px-4 py-6">
+
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-1 h-7 rounded-full" style="background-color:#dc2626;"></div>
+      <h2 class="text-lg font-bold tracking-wide" style="color:#fbbf24;">大会参加カレンダー</h2>
+    </div>
+
+    <!-- ローディング -->
+    <div x-show="loading" class="flex flex-col items-center justify-center py-16 gap-4">
+      <svg class="animate-spin w-10 h-10" style="color:#dc2626;" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>
+      <span class="text-sm" style="color:#94a3b8;">読み込み中...</span>
+    </div>
+
+    <template x-if="!loading">
+      <div>
+        <!-- 月ナビゲーション -->
+        <div class="flex items-center justify-between mb-4 rounded-xl px-4 py-3"
+          style="background-color:#161e3a; border:1px solid #1e2a4a;">
+          <button @click="prevMonth()" class="px-3 py-1 rounded-lg text-sm font-bold"
+            style="background-color:#1e2a4a; color:#fbbf24;">←</button>
+          <h3 class="text-base font-bold" style="color:#fbbf24;" x-text="currentYearMonth"></h3>
+          <button @click="nextMonth()" class="px-3 py-1 rounded-lg text-sm font-bold"
+            style="background-color:#1e2a4a; color:#fbbf24;">→</button>
+        </div>
+
+        <!-- カレンダーグリッド -->
+        <div class="rounded-xl overflow-hidden mb-5" style="border:1px solid #1e2a4a;">
+          <!-- 曜日ヘッダー -->
+          <div class="grid grid-cols-7 text-center text-xs font-bold py-2"
+            style="background-color:#161e3a; border-bottom:1px solid #1e2a4a;">
+            <template x-for="d in ['日','月','火','水','木','金','土']" :key="d">
+              <div :style="d==='日' ? 'color:#f87171;' : d==='土' ? 'color:#93c5fd;' : 'color:#94a3b8;'" x-text="d"></div>
+            </template>
+          </div>
+          <!-- 日付セル -->
+          <div class="grid grid-cols-7">
+            <!-- 空白（月初前） -->
+            <template x-for="i in firstDayOfWeek" :key="'b'+i">
+              <div class="min-h-16 border-b border-r" style="border-color:#1e2a4a; background-color:#0a0e1a;"></div>
+            </template>
+            <!-- 日付（事前計算済みcalendarDaysを使用） -->
+            <template x-for="cell in calendarDays" :key="cell.day">
+              <div
+                class="min-h-16 p-1 border-b border-r cursor-pointer transition-colors"
+                style="border-color:#1e2a4a;"
+                :style="cell.entries.length > 0 ? 'background-color:#161e3a;' : 'background-color:#0a0e1a;'"
+                @click="selectDay(cell.day)"
+              >
+                <div class="text-xs font-bold mb-1"
+                  :style="cell.dow === 0 ? 'color:#f87171;' : cell.dow === 6 ? 'color:#93c5fd;' : 'color:#64748b;'"
+                  x-text="cell.day"></div>
+                <!-- 参加者ドット -->
+                <div class="flex flex-wrap gap-0.5">
+                  <template x-for="e in cell.entries" :key="e.id + '_' + e.updated_at">
+                    <div class="w-2 h-2 rounded-full flex-shrink-0"
+                      :style="e.is_absent ? 'background-color:#4b5563;' : 'background-color:#dc2626;'"
+                      :title="memberName(e.member_id)"></div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- 選択日の詳細 -->
+        <div x-show="selectedDay !== null" x-cloak class="rounded-xl p-4 mb-5"
+          style="background-color:#161e3a; border:1px solid #dc2626;">
+          <p class="text-sm font-bold mb-3" style="color:#fbbf24;"
+            x-text="currentYear + '/' + String(currentMonth).padStart(2,'0') + '/' + String(selectedDay).padStart(2,'0') + ' の参加予定'"></p>
+          <template x-if="selectedDayEntries.length === 0">
+            <p class="text-sm" style="color:#64748b;">この日の参加予定はありません</p>
+          </template>
+          <div class="space-y-2">
+            <template x-for="e in selectedDayEntries" :key="e.id + '_' + e.updated_at">
+              <div class="flex items-center gap-3 px-3 py-2 rounded-lg"
+                :style="e.is_absent ? 'background-color:#1e2a4a;' : 'background-color:#0f1629;'">
+                <div class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  :style="e.is_absent ? 'background-color:#4b5563;' : 'background-color:#dc2626;'"></div>
+                <div class="flex-1 min-w-0">
+                  <span class="text-sm font-semibold" :style="e.is_absent ? 'color:#6b7280;' : 'color:#f1f5f9;'"
+                    x-text="memberName(e.member_id)"></span>
+                  <span x-show="e.is_absent" x-cloak class="ml-2 text-xs px-1.5 py-0.5 rounded"
+                    style="background-color:#374151; color:#9ca3af;">不参加</span>
+                </div>
+                <div x-show="!e.is_absent" x-cloak class="text-xs" style="color:#94a3b8;">
+                  <span x-show="e.venue" x-cloak x-text="e.venue"></span>
+                  <template x-if="e.rank">
+                    <span class="ml-2 px-2 py-0.5 rounded font-bold"
+                      style="background-color:#052e16; color:#4ade80;"
+                      x-text="e.rank + '位'"></span>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- 今月の全参加予定リスト -->
+        <div>
+          <div class="flex items-center gap-2 mb-3">
+            <div class="w-1 h-5 rounded-full" style="background-color:#dc2626;"></div>
+            <h3 class="text-sm font-bold" style="color:#fbbf24;" x-text="currentYearMonth + ' の参加予定一覧'"></h3>
+          </div>
+
+          <template x-if="monthEntries.length === 0">
+            <p class="text-sm text-center py-8" style="color:#64748b;">この月の参加予定はありません</p>
+          </template>
+
+          <div class="space-y-2">
+            <template x-for="e in monthEntries" :key="e.id + '_' + e.updated_at">
+              <div class="rounded-xl px-4 py-3 flex items-center gap-3"
+                :style="e.is_absent
+                  ? 'background-color:#161e3a; border:1px solid #1e2a4a; opacity:0.5;'
+                  : 'background-color:#161e3a; border:1px solid #1e2a4a;'">
+                <div>
+                  <p class="text-sm font-semibold" :style="e.is_absent ? 'color:#6b7280;' : 'color:#f1f5f9;'"
+                    x-text="memberName(e.member_id)"></p>
+                  <p class="text-xs mt-0.5" style="color:#64748b;">
+                    <span x-text="e.date"></span>
+                    <span x-show="e.venue" x-cloak x-text="' — ' + e.venue"></span>
+                    <span x-show="e.is_absent" x-cloak class="ml-1 px-1.5 py-0.5 rounded"
+                      style="background-color:#374151; color:#9ca3af; font-size:0.65rem;">不参加</span>
+                  </p>
+                </div>
+                <div class="ml-auto flex-shrink-0">
+                  <template x-if="e.rank">
+                    <span class="text-xs px-2 py-0.5 rounded font-bold"
+                      style="background-color:#052e16; color:#4ade80;"
+                      x-text="e.rank + '位'"></span>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+      </div>
+    </template>
+
+  </main>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="mt-10 py-6 px-4 text-center border-t" style="border-color:#1e2a4a;">
+    <p class="text-xs" style="color:#64748b;">※ ランキングはコミュニティ内の順位です。全国順位とは異なります。</p>
+  </footer>
+
+  <script>
+    function calendarApp() {
+      return {
+        loading: true,
+        members: [],
+        cityEntries: [],
+        currentYear: new Date().getFullYear(),
+        currentMonth: new Date().getMonth() + 1,
+        selectedDay: null,
+
+        async init() {
+          try {
+            const [members, city] = await Promise.all([
+              gasGet('getMembers'),
+              gasGet('getCity'),
+            ]);
+            this.members = members;
+            this.cityEntries = city;
+          } catch (e) {
+            console.error('データ取得エラー:', e);
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        get currentYearMonth() {
+          return this.currentYear + '年' + this.currentMonth + '月';
+        },
+
+        get firstDayOfWeek() {
+          return new Date(this.currentYear, this.currentMonth - 1, 1).getDay();
+        },
+
+        // 日付ごとのエントリーを事前計算してオブジェクトの配列で返す
+        get calendarDays() {
+          const count = new Date(this.currentYear, this.currentMonth, 0).getDate();
+          const days = [];
+          for (let d = 1; d <= count; d++) {
+            const dateStr = this.currentYear + '-'
+              + String(this.currentMonth).padStart(2, '0') + '-'
+              + String(d).padStart(2, '0');
+            days.push({
+              day: d,
+              dow: new Date(this.currentYear, this.currentMonth - 1, d).getDay(),
+              entries: this.cityEntries.filter(e => e.date === dateStr),
+            });
+          }
+          return days;
+        },
+
+        get monthEntries() {
+          const prefix = this.currentYear + '-' + String(this.currentMonth).padStart(2, '0');
+          return this.cityEntries
+            .filter(e => e.date && e.date.startsWith(prefix))
+            .sort((a, b) => a.date.localeCompare(b.date));
+        },
+
+        get selectedDayEntries() {
+          if (this.selectedDay === null) return [];
+          const cell = this.calendarDays.find(c => c.day === this.selectedDay);
+          return cell ? cell.entries : [];
+        },
+
+        selectDay(day) {
+          this.selectedDay = this.selectedDay === day ? null : day;
+        },
+
+        memberName(memberId) {
+          const m = this.members.find(m => String(m.id) === String(memberId));
+          return m ? m.name : 'メンバー' + memberId;
+        },
+
+        prevMonth() {
+          this.selectedDay = null;
+          if (this.currentMonth === 1) { this.currentYear--; this.currentMonth = 12; }
+          else { this.currentMonth--; }
+        },
+
+        nextMonth() {
+          this.selectedDay = null;
+          if (this.currentMonth === 12) { this.currentYear++; this.currentMonth = 1; }
+          else { this.currentMonth++; }
+        },
+      };
+    }
+  </script>
+</body>
+</html>
