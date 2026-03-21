@@ -102,6 +102,31 @@
               </div>
             </div>
 
+            <!-- バッジ管理 -->
+            <div class="rounded-xl p-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+              <div class="flex items-center gap-2 mb-3">
+                <div class="w-1 h-5 rounded-full" style="background-color:#dc2626;"></div>
+                <h3 class="text-sm font-bold" style="color:#fbbf24;">出場権バッジ</h3>
+              </div>
+              <p class="text-xs mb-3" style="color:#64748b;">取得した出場権をON/OFFしてください</p>
+              <div class="flex gap-2 flex-wrap">
+                <button @click="toggleMark('WCS')"
+                  class="px-3 py-1.5 rounded-lg text-sm font-bold transition-opacity hover:opacity-80"
+                  :style="hasMark('WCS') ? 'background-color:#7c3aed; color:#fff;' : 'background-color:#1e2a4a; color:#64748b;'">
+                  🏆🌍 WCS</button>
+                <button @click="toggleMark('JCS')"
+                  class="px-3 py-1.5 rounded-lg text-sm font-bold transition-opacity hover:opacity-80"
+                  :style="hasMark('JCS') ? 'background-color:#dc2626; color:#fff;' : 'background-color:#1e2a4a; color:#64748b;'">
+                  🏆🇯🇵 JCS</button>
+                <button @click="toggleMark('CL')"
+                  class="px-3 py-1.5 rounded-lg text-sm font-bold transition-opacity hover:opacity-80"
+                  :style="hasMark('CL') ? 'background-color:#0369a1; color:#fff;' : 'background-color:#1e2a4a; color:#64748b;'">
+                  🏆🎯 次回CL</button>
+              </div>
+              <p x-show="markMsg" x-cloak class="mt-2 text-xs font-medium"
+                :style="markMsgOk ? 'color:#4ade80;' : 'color:#f87171;'" x-text="markMsg"></p>
+            </div>
+
             <!-- CSP内訳：シティリーグ -->
             <div class="rounded-xl p-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
               <div class="flex items-center gap-2 mb-3">
@@ -367,6 +392,10 @@
         deleteError: '',
         deleteLoading: false,
 
+        // バッジ
+        markMsg: '',
+        markMsgOk: false,
+
         async init() {
           const params = new URLSearchParams(window.location.search);
           const id = params.get('id');
@@ -465,6 +494,36 @@
           this.showDeleteModal = false;
           this.deleteTarget = null;
           this.deleteError = '';
+        },
+
+        hasMark(mark) {
+          return this.detail?.member?.marks
+            ? this.detail.member.marks.split(',').includes(mark)
+            : false;
+        },
+
+        async toggleMark(mark) {
+          const current = this.detail?.member?.marks
+            ? this.detail.member.marks.split(',').filter(Boolean)
+            : [];
+          const newMarks = current.includes(mark)
+            ? current.filter(x => x !== mark)
+            : [...current, mark];
+          try {
+            await gasPost({
+              action: 'updateMemberMarks',
+              member_id: this.detail.member.id,
+              id: this.detail.member.id,
+              marks: newMarks.join(','),
+            });
+            this.detail.member.marks = newMarks.join(',');
+            this.markMsg = (newMarks.includes(mark) ? '付与' : '削除') + 'しました: ' + mark;
+            this.markMsgOk = true;
+            setTimeout(() => { this.markMsg = ''; }, 3000);
+          } catch (e) {
+            this.markMsg = e.message || 'バッジ更新に失敗しました';
+            this.markMsgOk = false;
+          }
         },
 
         async confirmDelete() {
