@@ -135,7 +135,7 @@
       </div>
 
       <div x-show="!loadingEntries && entries.length > 0" x-cloak class="space-y-3">
-        <template x-for="entry in entries" :key="entry.id">
+        <template x-for="entry in entries" :key="entry.id + '_' + entry.updated_at">
           <div class="rounded-xl overflow-hidden" style="background-color:#161e3a; border:1px solid #1e2a4a;">
 
             <!-- メイン行 -->
