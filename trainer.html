@@ -239,18 +239,22 @@
         currentLeagueYear: '',
 
         async init() {
-          try {
-            const [members, years] = await Promise.all([
-              gasGet('getMembers'),
-              gasGet('getLeagueYears'),
-            ]);
-            this.members = members;
-            this.leagueYears = years;
+          // allSettled で一方が失敗しても両方の結果を受け取る
+          const [membersResult, yearsResult] = await Promise.allSettled([
+            gasGet('getMembers'),
+            gasGet('getLeagueYears'),
+          ]);
+          if (membersResult.status === 'fulfilled') this.members = membersResult.value;
+          else console.error('メンバー取得エラー:', membersResult.reason);
+          if (yearsResult.status === 'fulfilled') {
+            this.leagueYears = yearsResult.value;
             // デフォルトは最新年度
             if (this.leagueYears.length > 0) {
               this.currentLeagueYear = this.leagueYears[this.leagueYears.length - 1];
             }
-          } catch (e) { console.error(e); }
+          } else {
+            console.error('年度取得エラー:', yearsResult.reason);
+          }
         },
 
         selectYear(year) {
