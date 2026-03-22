@@ -53,6 +53,20 @@
       <h2 class="text-lg font-bold tracking-wide" style="color:#fbbf24;">トレーナーズリーグ</h2>
     </div>
 
+    <!-- 年度タブ -->
+    <div x-show="leagueYears.length > 0" x-cloak class="flex gap-2 mb-5 flex-wrap">
+      <template x-for="year in leagueYears" :key="year">
+        <button
+          @click="selectYear(year)"
+          class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all"
+          :style="currentLeagueYear === year
+            ? 'background-color:#dc2626; color:#fff;'
+            : 'background-color:#161e3a; color:#94a3b8; border:1px solid #1e2a4a;'"
+          x-text="year"
+        ></button>
+      </template>
+    </div>
+
     <!-- メンバー選択 -->
     <div class="rounded-xl p-4 mb-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
       <label class="block text-sm font-medium mb-2" style="color:#94a3b8;">メンバー選択</label>
@@ -220,9 +234,30 @@
         deletePassword: '',
         deleteErrorMsg: '',
         deleting: false,
+        // 年度管理
+        leagueYears: [],
+        currentLeagueYear: '',
 
         async init() {
-          try { this.members = await gasGet('getMembers'); } catch (e) { console.error(e); }
+          try {
+            const [members, years] = await Promise.all([
+              gasGet('getMembers'),
+              gasGet('getLeagueYears'),
+            ]);
+            this.members = members;
+            this.leagueYears = years;
+            // デフォルトは最新年度
+            if (this.leagueYears.length > 0) {
+              this.currentLeagueYear = this.leagueYears[this.leagueYears.length - 1];
+            }
+          } catch (e) { console.error(e); }
+        },
+
+        selectYear(year) {
+          this.currentLeagueYear = year;
+          this.successMsg = '';
+          this.warningMsg = '';
+          this.errorMsg = '';
         },
 
         async onMemberChange() {
@@ -238,8 +273,11 @@
           finally { this.loadingHistory = false; }
         },
 
+        // 選択中メンバー＆選択中年度のエントリーのみ
         get memberHistory() {
-          return this.history.filter(e => String(e.member_id) === String(this.selectedMember));
+          return this.history
+            .filter(e => String(e.member_id) === String(this.selectedMember))
+            .filter(e => String(e.league_year) === String(this.currentLeagueYear));
         },
 
         get annualTotal() {
@@ -256,6 +294,7 @@
             this.errorMsg = '参加人数は2以上を入力してください。'; return;
           }
           if (!this.form.rank || this.form.rank < 1) { this.errorMsg = '順位を入力してください。'; return; }
+          if (!this.currentLeagueYear) { this.errorMsg = '年度が取得できませんでした。再読み込みしてください。'; return; }
 
           this.submitting = true;
           try {
@@ -264,6 +303,7 @@
               member_id: parseInt(this.selectedMember),
               participants_count: this.form.participants_count,
               rank: this.form.rank,
+              league_year: this.currentLeagueYear,  // 選択中の年度を送信
             });
             await this.fetchHistory();
             this.successMsg = `+${data.csp_earned}pt 獲得！年間累計：${this.annualTotal}pt / 30pt`;

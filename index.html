@@ -52,6 +52,20 @@
       <h2 class="text-lg font-bold tracking-wide" style="color:#fbbf24;">CSP ランキング</h2>
     </div>
 
+    <!-- 年度タブ -->
+    <div x-show="leagueYears.length > 0" x-cloak class="flex gap-2 mb-5 flex-wrap">
+      <template x-for="year in leagueYears" :key="year">
+        <button
+          @click="selectYear(year)"
+          class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all"
+          :style="currentLeagueYear === year
+            ? 'background-color:#dc2626; color:#fff;'
+            : 'background-color:#161e3a; color:#94a3b8; border:1px solid #1e2a4a;'"
+          x-text="year"
+        ></button>
+      </template>
+    </div>
+
     <!-- ローディング -->
     <div x-show="loading" class="flex flex-col items-center justify-center py-16 gap-4">
       <svg class="animate-spin w-10 h-10" style="color:#dc2626;" fill="none" viewBox="0 0 24 24">
@@ -145,15 +159,39 @@
         loading: true,
         ranking: [],
         error: '',
+        leagueYears: [],
+        currentLeagueYear: '',
 
         async init() {
+          // 年度一覧を取得してタブを生成
           try {
-            this.ranking = await gasGet('getRanking');
+            this.leagueYears = await gasGet('getLeagueYears');
+            // デフォルトは最新年度（配列の末尾）
+            if (this.leagueYears.length > 0) {
+              this.currentLeagueYear = this.leagueYears[this.leagueYears.length - 1];
+            }
+          } catch (e) {
+            console.error('年度一覧の取得に失敗しました:', e);
+          }
+          await this.fetchRanking();
+        },
+
+        async fetchRanking() {
+          this.loading = true;
+          this.error = '';
+          try {
+            const params = this.currentLeagueYear ? { league_year: this.currentLeagueYear } : {};
+            this.ranking = await gasGet('getRanking', params);
           } catch (e) {
             this.error = 'ランキングの取得に失敗しました: ' + e.message;
           } finally {
             this.loading = false;
           }
+        },
+
+        async selectYear(year) {
+          this.currentLeagueYear = year;
+          await this.fetchRanking();
         },
       };
     }

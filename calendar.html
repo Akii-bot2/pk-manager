@@ -52,6 +52,20 @@
       <h2 class="text-lg font-bold tracking-wide" style="color:#fbbf24;">大会参加カレンダー</h2>
     </div>
 
+    <!-- 年度タブ -->
+    <div x-show="leagueYears.length > 0" x-cloak class="flex gap-2 mb-5 flex-wrap">
+      <template x-for="year in leagueYears" :key="year">
+        <button
+          @click="selectYear(year)"
+          class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all"
+          :style="currentLeagueYear === year
+            ? 'background-color:#dc2626; color:#fff;'
+            : 'background-color:#161e3a; color:#94a3b8; border:1px solid #1e2a4a;'"
+          x-text="year"
+        ></button>
+      </template>
+    </div>
+
     <!-- ローディング -->
     <div x-show="loading" class="flex flex-col items-center justify-center py-16 gap-4">
       <svg class="animate-spin w-10 h-10" style="color:#dc2626;" fill="none" viewBox="0 0 24 24">
@@ -199,24 +213,58 @@
       return {
         loading: true,
         members: [],
-        cityEntries: [],
+        allCityEntries: [],  // 全件キャッシュ
+        allSeasons: [],      // 全シーズンキャッシュ
+        cityEntries: [],     // 表示中の年度に絞ったエントリー
         currentYear: new Date().getFullYear(),
         currentMonth: new Date().getMonth() + 1,
         selectedDay: null,
+        leagueYears: [],
+        currentLeagueYear: '',
 
         async init() {
           try {
-            const [members, city] = await Promise.all([
+            const [members, city, seasons, years] = await Promise.all([
               gasGet('getMembers'),
               gasGet('getCity'),
+              gasGet('getSeasons'),
+              gasGet('getLeagueYears'),
             ]);
             this.members = members;
-            this.cityEntries = city;
+            this.allCityEntries = city;
+            this.allSeasons = seasons;
+            this.leagueYears = years;
+            // デフォルトは最新年度
+            if (this.leagueYears.length > 0) {
+              this.currentLeagueYear = this.leagueYears[this.leagueYears.length - 1];
+            }
+            this.filterEntries();
           } catch (e) {
             console.error('データ取得エラー:', e);
           } finally {
             this.loading = false;
           }
+        },
+
+        // 選択中の年度に対応するエントリーに絞り込む
+        filterEntries() {
+          if (!this.currentLeagueYear) {
+            this.cityEntries = this.allCityEntries;
+            return;
+          }
+          // 対象年度のseason_id一覧を取得
+          const targetSeasonIds = this.allSeasons
+            .filter(s => String(s.league_year) === String(this.currentLeagueYear))
+            .map(s => Number(s.id));
+          this.cityEntries = this.allCityEntries.filter(
+            e => targetSeasonIds.includes(Number(e.season_id))
+          );
+        },
+
+        selectYear(year) {
+          this.currentLeagueYear = year;
+          this.selectedDay = null;
+          this.filterEntries();
         },
 
         get currentYearMonth() {
