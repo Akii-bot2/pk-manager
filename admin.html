@@ -111,9 +111,16 @@
       <!-- シーズン追加フォーム -->
       <div class="rounded-lg p-4 space-y-3" style="background-color:#0f1629; border:1px solid #1e2a4a;">
         <p class="text-xs font-semibold" style="color:#94a3b8;">シーズン追加</p>
+        <!-- 年度（league_year）入力 -->
+        <div>
+          <label class="text-xs mb-1 block" style="color:#64748b;">年度 <span style="color:#dc2626;">*</span>（例：2025-2026）</label>
+          <input type="text" x-model="newSeason.league_year" placeholder="2025-2026"
+            class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+            style="background-color:#161e3a; border:1px solid #1e2a4a; color:#f1f5f9;" />
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="text-xs mb-1 block" style="color:#64748b;">年度</label>
+            <label class="text-xs mb-1 block" style="color:#64748b;">カレンダー年</label>
             <input type="number" x-model.number="newSeason.year" placeholder="2026"
               class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
               style="background-color:#161e3a; border:1px solid #1e2a4a; color:#f1f5f9;" />
@@ -131,8 +138,8 @@
           </div>
         </div>
         <div>
-          <label class="text-xs mb-1 block" style="color:#64748b;">表示名（例：2026 S1）</label>
-          <input type="text" x-model="newSeason.name" placeholder="2026 S1"
+          <label class="text-xs mb-1 block" style="color:#64748b;">表示名（例：2025-2026 S1）</label>
+          <input type="text" x-model="newSeason.name" placeholder="2025-2026 S1"
             class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
             style="background-color:#161e3a; border:1px solid #1e2a4a; color:#f1f5f9;" />
         </div>
@@ -229,7 +236,8 @@
 
         seasons: [],
         seasonsLoading: false,
-        newSeason: { year: new Date().getFullYear(), season_number: 1, name: '' },
+        // league_year の初期値は現在日付から自動生成（9月以降は新年度）
+        newSeason: { league_year: (() => { const m = new Date().getMonth()+1, y = new Date().getFullYear(); return m >= 9 ? `${y}-${y+1}` : `${y-1}-${y}`; })(), year: new Date().getFullYear(), season_number: 1, name: '' },
         seasonSaving: false,
         seasonMsg: '',
         seasonMsgOk: false,
@@ -282,14 +290,16 @@
         },
 
         async addSeason() {
-          if (!this.newSeason.year || !this.newSeason.name.trim()) {
-            this.showSeasonMsg('年度と表示名を入力してください', false); return;
+          // league_year・year・name はすべて必須
+          if (!this.newSeason.league_year.trim() || !this.newSeason.year || !this.newSeason.name.trim()) {
+            this.showSeasonMsg('年度（例：2025-2026）・カレンダー年・表示名を入力してください', false); return;
           }
           this.seasonSaving = true;
           try {
             await gasPost({
               action: 'addSeason',
               admin_password: this.adminPassword,
+              league_year: this.newSeason.league_year.trim(),
               year: this.newSeason.year,
               season_number: this.newSeason.season_number,
               name: this.newSeason.name.trim(),
