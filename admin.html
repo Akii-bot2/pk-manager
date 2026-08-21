@@ -25,12 +25,9 @@
       style="background-color:#161e3a; border-color:#1e2a4a;">
       <ul class="py-1">
         <template x-for="item in [
-          { label: 'ランキング', href: './index.html' },
-          { label: 'メンバー登録', href: './member.html' },
-          { label: 'シティリーグ', href: './city.html' },
-          { label: 'トレリ', href: './trainer.html' },
-          { label: 'CL記録', href: './cl.html' },
-          { label: 'カレンダー', href: './calendar.html' },
+          { label: '参加予定・ランキング', href: './index.html' },
+          { label: '大会記録', href: './records.html' },
+          { label: 'メンバー', href: './member.html' },
           { label: '管理者', href: './admin.html' },
         ]" :key="item.href">
           <li><a :href="item.href" @click="open = false"

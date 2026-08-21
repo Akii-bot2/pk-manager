@@ -3,11 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CSPランキング | ポケカ大会管理</title>
+  <title>参加予定・CSPランキング | ポケカ大会管理</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="./js/api.js"></script>
-  <style>[x-cloak] { display: none !important; }</style>
+  <style>
+    [x-cloak] { display: none !important; }
+    /* 表はスクショ前提。行の境界をはっきりさせる */
+    .tbl th, .tbl td { border-bottom: 1px solid #1e2a4a; }
+    .tbl tbody:last-child tr:last-child td { border-bottom: none; }
+  </style>
 </head>
 <body class="min-h-screen text-white" style="background-color:#0a0e1a;">
 
@@ -25,12 +30,9 @@
       style="background-color:#161e3a; border-color:#1e2a4a;">
       <ul class="py-1">
         <template x-for="item in [
-          { label: 'ランキング', href: './index.html' },
-          { label: 'メンバー登録', href: './member.html' },
-          { label: 'シティリーグ', href: './city.html' },
-          { label: 'トレリ', href: './trainer.html' },
-          { label: 'CL記録', href: './cl.html' },
-          { label: 'カレンダー', href: './calendar.html' },
+          { label: '参加予定・ランキング', href: './index.html' },
+          { label: '大会記録', href: './records.html' },
+          { label: 'メンバー', href: './member.html' },
           { label: '管理者', href: './admin.html' },
         ]" :key="item.href">
           <li><a :href="item.href" @click="open = false"
@@ -45,24 +47,34 @@
   </header>
 
   <!-- ===== MAIN ===== -->
-  <main x-data="rankingApp()" x-init="init()" class="max-w-2xl mx-auto px-4 py-6">
+  <main x-data="scheduleApp()" x-init="init()" class="max-w-3xl mx-auto px-4 py-6">
 
     <div class="flex items-center gap-3 mb-5">
       <div class="w-1 h-7 rounded-full" style="background-color:#dc2626;"></div>
-      <h2 class="text-lg font-bold tracking-wide" style="color:#fbbf24;">CSP ランキング</h2>
+      <h2 class="text-lg font-bold tracking-wide" style="color:#fbbf24;">シティリーグ参加予定・CSPランキング</h2>
     </div>
 
     <!-- 年度タブ -->
-    <div x-show="leagueYears.length > 0" x-cloak class="flex gap-2 mb-5 flex-wrap">
+    <div x-show="leagueYears.length > 1" x-cloak class="flex gap-2 mb-3 flex-wrap">
       <template x-for="year in leagueYears" :key="year">
-        <button
-          @click="selectYear(year)"
+        <button @click="selectYear(year)"
           class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all"
           :style="currentLeagueYear === year
             ? 'background-color:#dc2626; color:#fff;'
             : 'background-color:#161e3a; color:#94a3b8; border:1px solid #1e2a4a;'"
-          x-text="year"
-        ></button>
+          x-text="year"></button>
+      </template>
+    </div>
+
+    <!-- シーズンタブ -->
+    <div x-show="!loading && yearSeasons.length > 0" x-cloak class="flex gap-2 mb-4 flex-wrap">
+      <template x-for="s in yearSeasons" :key="s.id">
+        <button @click="currentSeasonId = s.id; openId = null;"
+          class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all"
+          :style="String(currentSeasonId) === String(s.id)
+            ? 'background-color:#fbbf24; color:#0a0e1a;'
+            : 'background-color:#161e3a; color:#94a3b8; border:1px solid #1e2a4a;'"
+          x-text="'S' + s.season_number"></button>
       </template>
     </div>
 
@@ -75,123 +87,350 @@
       <span class="text-sm" style="color:#94a3b8;">読み込み中...</span>
     </div>
 
-    <!-- エラー -->
-    <div x-show="!loading && error" x-cloak class="text-center py-12">
-      <p class="text-sm" style="color:#f87171;" x-text="error"></p>
+    <div x-show="!loading && loadError" x-cloak class="rounded-xl p-6 text-center"
+      style="background-color:#161e3a; border:1px solid #7f1d1d;">
+      <p class="text-sm" style="color:#f87171;" x-text="loadError"></p>
+      <button @click="init()" class="mt-4 text-sm px-4 py-2 rounded-lg"
+        style="background-color:#1e2a4a; color:#94a3b8;">再読み込み</button>
     </div>
 
-    <!-- データなし -->
-    <div x-show="!loading && !error && ranking.length === 0" x-cloak class="text-center py-16">
-      <p class="text-base" style="color:#94a3b8;">まだデータがありません</p>
+    <div x-show="!loading && !loadError && yearSeasons.length === 0" x-cloak
+      class="rounded-xl p-6 text-center" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+      <p class="text-sm" style="color:#64748b;">この年度のシーズンが登録されていません。<br>管理者画面でシーズンを追加してください。</p>
     </div>
 
-    <!-- ランキングリスト -->
-    <div x-show="!loading && ranking.length > 0" x-cloak class="space-y-3">
-      <template x-for="(item, index) in ranking" :key="item.id">
-        <div
-          :class="index === 0 ? 'rounded-xl p-4 shadow-lg' : 'rounded-xl p-3'"
-          :style="index === 0
-            ? 'background:linear-gradient(135deg,#1e2a4a 0%,#2a1a00 100%); border:2px solid #f59e0b;'
-            : 'background-color:#161e3a; border:1px solid #1e2a4a;'"
-        >
-          <div class="flex items-center gap-3">
-            <!-- 順位バッジ -->
-            <div class="flex-shrink-0 flex items-center justify-center rounded-full font-black"
-              :class="index === 0 ? 'w-11 h-11 text-lg' : 'w-9 h-9 text-sm'"
-              :style="index === 0
-                ? 'background:linear-gradient(135deg,#f59e0b,#fbbf24); color:#0a0e1a;'
-                : index === 1
-                  ? 'background-color:#4b5563; color:#e5e7eb;'
-                  : index === 2
-                    ? 'background-color:#78350f; color:#fcd34d;'
-                    : 'background-color:#1e2a4a; color:#94a3b8;'"
-              x-text="(index + 1) + '位'"
-            ></div>
-
-            <!-- 名前 + バッジ -->
-            <div class="flex-1 min-w-0">
-              <a :href="'./member.html?id=' + item.id"
-                class="block font-semibold truncate"
-                :class="index === 0 ? 'text-lg' : 'text-base'"
-                :style="index === 0 ? 'color:#fbbf24;' : 'color:#f1f5f9;'"
-                x-text="item.name"
-              ></a>
-              <!-- 出場権マーク -->
-              <div class="flex flex-wrap gap-1 mt-1">
-                <span x-show="item.marks.includes('WCS')" x-cloak
-                  class="text-xs px-1.5 py-0.5 rounded font-bold"
-                  style="background-color:#7c3aed; color:#fff;">🏆🌍 WCS</span>
-                <span x-show="item.marks.includes('JCS')" x-cloak
-                  class="text-xs px-1.5 py-0.5 rounded font-bold"
-                  style="background-color:#1d4ed8; color:#fff;">🏆🇯🇵 JCS</span>
-                <span x-show="item.marks.includes('CL')" x-cloak
-                  class="text-xs px-1.5 py-0.5 rounded font-bold"
-                  style="background-color:#065f46; color:#fff;">🏆🎯 次回CL</span>
-              </div>
-            </div>
-
-            <!-- CSP -->
-            <div class="flex-shrink-0 text-right">
-              <span class="font-black tabular-nums"
-                :class="index === 0 ? 'text-2xl' : 'text-xl'"
-                :style="index === 0 ? 'color:#fbbf24;' : 'color:#f1f5f9;'"
-                x-text="item.total_csp"
-              ></span>
-              <span class="block text-xs"
-                :style="index === 0 ? 'color:#fcd34d;' : 'color:#64748b;'">pt</span>
-            </div>
-          </div>
+    <template x-if="!loading && !loadError && currentSeasonId">
+      <div>
+        <!-- 見出し（スクショに写る想定） -->
+        <div class="rounded-t-xl px-4 py-3 flex items-baseline justify-between gap-3 flex-wrap"
+          style="background-color:#1e2a4a;">
+          <span class="font-black" style="color:#fbbf24;" x-text="currentSeasonName"></span>
+          <span class="text-xs tabular-nums" style="color:#cbd5e1;">
+            参加予定 <span class="font-bold" x-text="summary.planned"></span> ・
+            不参加 <span class="font-bold" x-text="summary.absent"></span> ・
+            未登録 <span class="font-bold" x-text="summary.none"></span>
+          </span>
         </div>
-      </template>
-    </div>
+
+        <!-- 表本体 -->
+        <div class="overflow-x-auto rounded-b-xl" style="background-color:#161e3a; border:1px solid #1e2a4a; border-top:none;">
+          <table class="tbl w-full text-sm" style="min-width:520px;">
+            <thead>
+              <tr class="text-left" style="background-color:#0f1629;">
+                <th @click="sortBy('name')" class="px-3 py-2 font-bold cursor-pointer select-none whitespace-nowrap"
+                  style="color:#94a3b8;">メンバー<span x-text="arrow('name')"></span></th>
+                <th @click="sortBy('date')" class="px-3 py-2 font-bold cursor-pointer select-none whitespace-nowrap"
+                  style="color:#94a3b8;">日付<span x-text="arrow('date')"></span></th>
+                <th @click="sortBy('venue')" class="px-3 py-2 font-bold cursor-pointer select-none whitespace-nowrap"
+                  style="color:#94a3b8;">会場<span x-text="arrow('venue')"></span></th>
+                <!-- 通算CSP＝年度合計（シティ全シーズン＋トレリ）＝CSPランキング。
+                     そのシーズン単体のCSPは表には出さず、行を開いた詳細（この回のCSP）で見せる -->
+                <th @click="sortBy('csp')" class="px-3 py-2 font-bold cursor-pointer select-none whitespace-nowrap text-right"
+                  style="color:#fbbf24;">通算CSP<span x-text="arrow('csp')"></span></th>
+              </tr>
+            </thead>
+            <!-- 1行 = メイン行 + 詳細行 の2行なので、tbody を行ペアごとに分ける
+                 （table 直下に複数の tbody を置くのは正当なHTML） -->
+            <template x-for="row in sortedRows" :key="row.member_id">
+                  <tbody>
+                    <tr @click="toggleDetail(row.member_id)" class="cursor-pointer transition-colors"
+                      :style="String(openId) === String(row.member_id) ? 'background-color:#1e2a4a;' : ''">
+                      <td class="px-3 py-2 whitespace-nowrap">
+                        <span class="text-xs tabular-nums mr-1" style="color:#64748b;"
+                          x-text="'#' + row.community_rank"></span>
+                        <span class="font-bold"
+                          :style="row.status === 'none' ? 'color:#475569;' : 'color:#e2e8f0;'"
+                          x-text="row.name"></span>
+                        <template x-for="m in row.marks" :key="m">
+                          <span class="ml-1" x-text="markIcon(m)" :title="markLabel(m)"></span>
+                        </template>
+                        <span class="text-xs ml-1" style="color:#64748b;"
+                          x-text="String(openId) === String(row.member_id) ? '▾' : '▸'"></span>
+                      </td>
+                      <td class="px-3 py-2 whitespace-nowrap tabular-nums">
+                        <span x-show="row.status === 'planned' || row.status === 'done'" style="color:#93c5fd;" x-text="row.dateLabel"></span>
+                        <span x-show="row.status === 'planned_nodate'" style="color:#64748b;">日程未定</span>
+                        <span x-show="row.status === 'absent'" class="px-2 py-0.5 rounded text-xs font-bold"
+                          style="background-color:#374151; color:#9ca3af;">不参加</span>
+                        <span x-show="row.status === 'none'" style="color:#475569;">未登録</span>
+                      </td>
+                      <td class="px-3 py-2" style="color:#e2e8f0;" x-text="row.venue || ''"></td>
+                      <td class="px-3 py-2 text-right tabular-nums font-black"
+                        :style="row.total_csp > 0 ? 'color:#fbbf24;' : 'color:#475569;'"
+                        x-text="row.total_csp"></td>
+                    </tr>
+                    <!-- 詳細行 -->
+                    <tr x-show="String(openId) === String(row.member_id)" x-cloak>
+                      <td colspan="4" class="px-3 pb-3 pt-0" style="background-color:#1e2a4a;">
+                        <div class="rounded-lg p-3 text-xs space-y-3" style="background-color:#0f1629;">
+
+                          <!-- 年度通算CSP内訳（ランキングの中身） -->
+                          <div>
+                            <p class="font-bold mb-1" style="color:#fbbf24;"
+                              x-text="currentLeagueYear + ' 通算CSP'"></p>
+                            <div class="flex flex-wrap gap-x-4 gap-y-1">
+                              <span style="color:#64748b;">シティ計 <span class="font-bold tabular-nums" style="color:#e2e8f0;" x-text="row.city_csp + 'pt'"></span></span>
+                              <span style="color:#64748b;">トレリ計 <span class="font-bold tabular-nums" style="color:#e2e8f0;" x-text="row.trainer_csp + 'pt'"></span></span>
+                              <span style="color:#64748b;">合計 <span class="font-black tabular-nums" style="color:#fbbf24;" x-text="row.total_csp + 'pt'"></span></span>
+                              <span style="color:#64748b;">コミュニティ内 <span class="font-bold tabular-nums" style="color:#e2e8f0;" x-text="row.community_rank + '位'"></span></span>
+                            </div>
+                            <div x-show="row.marks.length > 0" x-cloak class="flex flex-wrap gap-1 mt-2">
+                              <template x-for="m in row.marks" :key="m">
+                                <span class="px-1.5 py-0.5 rounded font-bold" :style="markStyle(m)"
+                                  x-text="markIcon(m) + ' ' + markLabel(m)"></span>
+                              </template>
+                            </div>
+                          </div>
+
+                          <!-- このシーズンの内容 -->
+                          <div class="pt-2 border-t" style="border-color:#1e2a4a;">
+                            <p class="font-bold mb-1" style="color:#93c5fd;"
+                              x-text="currentSeasonName + ' の参加内容'"></p>
+                            <template x-if="row.status === 'none'">
+                              <p style="color:#64748b;">このシーズンはまだ登録されていません。</p>
+                            </template>
+                            <template x-if="row.status === 'absent'">
+                              <p style="color:#9ca3af;">不参加で登録されています。</p>
+                            </template>
+                            <template x-if="row.status !== 'none' && row.status !== 'absent'">
+                              <div class="grid grid-cols-2 gap-x-4 gap-y-2">
+                                <div><span style="color:#64748b;">日付</span><br>
+                                  <span style="color:#e2e8f0;" x-text="row.dateFull || '未定'"></span></div>
+                                <div><span style="color:#64748b;">会場</span><br>
+                                  <span style="color:#e2e8f0;" x-text="row.venue || '未定'"></span></div>
+                                <div><span style="color:#64748b;">順位</span><br>
+                                  <span style="color:#e2e8f0;" x-text="row.rank ? row.rank + '位' : '—'"></span></div>
+                                <div><span style="color:#64748b;">参加人数</span><br>
+                                  <span style="color:#e2e8f0;" x-text="row.participants ? row.participants + '人' : '—'"></span></div>
+                                <div><span style="color:#64748b;">この回のCSP</span><br>
+                                  <span class="font-bold" :style="row.seasonCsp > 0 ? 'color:#fbbf24;' : 'color:#64748b;'"
+                                    x-text="row.status === 'done' ? row.seasonCsp + 'pt' : '結果未入力'"></span></div>
+                                <div><span style="color:#64748b;">デッキコード</span><br>
+                                  <span style="color:#e2e8f0;" x-text="row.deck_code || '—'"></span></div>
+                              </div>
+                            </template>
+                          </div>
+
+                          <div class="pt-1 flex gap-2 flex-wrap">
+                            <a :href="'./member.html?id=' + row.member_id" @click.stop
+                              class="px-3 py-1 rounded font-bold"
+                              style="background-color:#1e3a5f; color:#93c5fd;">個人ページ</a>
+                            <a href="./records.html" @click.stop
+                              class="px-3 py-1 rounded font-bold"
+                              style="background-color:#1a2e1a; color:#4ade80;">登録・結果入力</a>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+            </template>
+          </table>
+        </div>
+
+        <p class="text-xs mt-3" style="color:#64748b;">
+          見出しをタップすると並び替え、名前をタップすると詳細（CSP内訳・順位・参加人数・デッキコード）が開きます。<br>
+          <span style="color:#fbbf24;">通算CSP</span>は年度合計（シティ全シーズン＋トレリ）。この列で並び替えるとCSPランキングになります。
+        </p>
+      </div>
+    </template>
+
   </main>
 
   <!-- ===== FOOTER ===== -->
   <footer class="mt-10 py-6 px-4 text-center border-t" style="border-color:#1e2a4a;">
-    <p class="text-xs leading-relaxed" style="color:#64748b;">
-      ※ ランキングはコミュニティ内の順位です。全国順位とは異なります。
-    </p>
+    <p class="text-xs" style="color:#64748b;">※ ランキングはコミュニティ内の順位です。全国順位とは異なります。</p>
   </footer>
 
   <script>
-    function rankingApp() {
+    function scheduleApp() {
+      // 会場名の並べ替え用（かな・英数は正しく並ぶ。漢字は読みが取れないためコード順）
+      const jaCollator = new Intl.Collator('ja');
+      const DOW = ['日', '月', '火', '水', '木', '金', '土'];
+
+      const MARKS = {
+        WCS: { icon: '🌍', label: 'WCS',    style: 'background-color:#7c3aed; color:#fff;' },
+        JCS: { icon: '🇯🇵', label: 'JCS',    style: 'background-color:#1d4ed8; color:#fff;' },
+        CL:  { icon: '🎯', label: '次回CL', style: 'background-color:#065f46; color:#fff;' },
+      };
+
       return {
         loading: true,
-        ranking: [],
-        error: '',
+        loadError: '',
+        ranking: [],   // getRanking の結果（年度通算CSP・順位・マーク込み。全メンバーが入る）
+        seasons: [],
+        city: [],
         leagueYears: [],
         currentLeagueYear: '',
+        currentSeasonId: '',
+        openId: null,
+        sortKey: 'date',
+        sortAsc: true,
 
         async init() {
-          // 年度一覧を取得してタブを生成
-          try {
-            this.leagueYears = await gasGet('getLeagueYears');
-            // デフォルトは最新年度（配列の末尾）
-            if (this.leagueYears.length > 0) {
-              this.currentLeagueYear = this.leagueYears[this.leagueYears.length - 1];
-            }
-          } catch (e) {
-            console.error('年度一覧の取得に失敗しました:', e);
-          }
-          await this.fetchRanking();
-        },
-
-        async fetchRanking() {
           this.loading = true;
-          this.error = '';
-          try {
-            const params = this.currentLeagueYear ? { league_year: this.currentLeagueYear } : {};
-            this.ranking = await gasGet('getRanking', params);
-          } catch (e) {
-            this.error = 'ランキングの取得に失敗しました: ' + e.message;
-          } finally {
+          this.loadError = '';
+          // getRanking はメンバー一覧も兼ねる（全メンバーを0ptでも返す）ので getMembers は呼ばない
+          const [rRes, sRes, cRes] = await Promise.allSettled([
+            gasGet('getRanking'),
+            gasGet('getSeasons'),
+            gasGet('getCity'),
+          ]);
+          if (rRes.status === 'fulfilled') this.ranking = rRes.value;
+          if (sRes.status === 'fulfilled') this.seasons = sRes.value;
+          if (cRes.status === 'fulfilled') this.city = cRes.value;
+
+          if (rRes.status === 'rejected' || sRes.status === 'rejected' || cRes.status === 'rejected') {
+            this.loadError = 'データの取得に失敗しました。通信状況を確認して再読み込みしてください。';
             this.loading = false;
+            return;
+          }
+
+          this.leagueYears = [...new Set(this.seasons.map(s => s.league_year).filter(Boolean))].sort();
+          if (this.leagueYears.length > 0) {
+            this.currentLeagueYear = this.leagueYears[this.leagueYears.length - 1];
+          }
+          this.pickFirstSeason();
+          this.loading = false;
+        },
+
+        // 年度を切り替えるとCSP集計の対象年度も変わるので、ランキングを取り直す
+        async selectYear(year) {
+          if (this.currentLeagueYear === year) return;
+          this.currentLeagueYear = year;
+          this.openId = null;
+          this.pickFirstSeason();
+          try {
+            this.ranking = await gasGet('getRanking', { league_year: year });
+          } catch (e) {
+            this.loadError = 'CSPの取得に失敗しました: ' + e.message;
           }
         },
 
-        async selectYear(year) {
-          this.currentLeagueYear = year;
-          await this.fetchRanking();
+        // 開いたときに表示するシーズンを決める。
+        // これから開催される予定が入っている一番早いシーズンを優先し、無ければ S1。
+        pickFirstSeason() {
+          const list = this.yearSeasons;
+          if (list.length === 0) { this.currentSeasonId = ''; return; }
+          const today = new Date().toISOString().slice(0, 10);
+          const upcoming = list.find(s => this.city.some(e =>
+            String(e.season_id) === String(s.id) && e.date && String(e.date) >= today
+          ));
+          this.currentSeasonId = (upcoming || list[0]).id;
+        },
+
+        get yearSeasons() {
+          return this.seasons
+            .filter(s => !this.currentLeagueYear || s.league_year === this.currentLeagueYear)
+            .sort((a, b) => Number(a.season_number) - Number(b.season_number));
+        },
+
+        get currentSeasonName() {
+          const s = this.seasons.find(x => String(x.id) === String(this.currentSeasonId));
+          return s ? s.name : '';
+        },
+
+        // メンバー全員分の行を作る（未登録のメンバーも行として出す）
+        // CSPは年度通算（ranking由来）、日付・会場・順位は選択中シーズン（city由来）
+        get rows() {
+          const bySeason = this.city.filter(e => String(e.season_id) === String(this.currentSeasonId));
+          return this.ranking.map(r => {
+            const e = bySeason.find(x => String(x.member_id) === String(r.id));
+            const base = {
+              member_id:      r.id,
+              name:           r.name,
+              city_csp:       Number(r.city_csp) || 0,
+              trainer_csp:    Number(r.trainer_csp) || 0,
+              total_csp:      Number(r.total_csp) || 0,
+              community_rank: r.community_rank,
+              marks:          r.marks || [],
+            };
+            if (!e) {
+              return { ...base, status: 'none', date: '', dateLabel: '', dateFull: '',
+                       venue: '', rank: '', participants: '', deck_code: '', seasonCsp: 0 };
+            }
+            const absent = Number(e.is_absent) === 1;
+            const hasResult = !!e.rank;
+            const status = absent ? 'absent' : (hasResult ? 'done' : (e.date ? 'planned' : 'planned_nodate'));
+            return {
+              ...base,
+              status,
+              date: e.date || '',
+              dateLabel: this.formatShort(e.date),
+              dateFull: e.date || '',
+              venue: absent ? '' : (e.venue || ''),
+              rank: e.rank || '',
+              participants: e.participants_count || '',
+              deck_code: e.deck_code || '',
+              seasonCsp: Number(e.csp_earned) || 0,
+            };
+          });
+        },
+
+        get summary() {
+          const r = this.rows;
+          return {
+            planned: r.filter(x => x.status === 'planned' || x.status === 'planned_nodate' || x.status === 'done').length,
+            absent:  r.filter(x => x.status === 'absent').length,
+            none:    r.filter(x => x.status === 'none').length,
+          };
+        },
+
+        get sortedRows() {
+          const dir = this.sortAsc ? 1 : -1;
+
+          // CSP順のときは「ランキング」として見るので、参加状況でのグループ分けをしない。
+          // （未登録でもCSPが高い人が下に沈むと順位表として成立しないため）
+          if (this.sortKey === 'csp') {
+            return [...this.rows].sort((a, b) =>
+              (a.total_csp - b.total_csp) * dir || jaCollator.compare(a.name, b.name));
+          }
+
+          // それ以外は 日程未定→不参加→未登録 を下にまとめる（スクショで上部が見やすいように）
+          const RANK = { done: 0, planned: 0, planned_nodate: 1, absent: 2, none: 3 };
+          return [...this.rows].sort((a, b) => {
+            const w = RANK[a.status] - RANK[b.status];
+            if (w !== 0) return w;
+            let c = 0;
+            switch (this.sortKey) {
+              case 'name':      c = jaCollator.compare(a.name, b.name); break;
+              case 'venue':     c = jaCollator.compare(a.venue, b.venue); break;
+              default:          c = String(a.date).localeCompare(String(b.date)); break;
+            }
+            if (c !== 0) return c * dir;
+            return jaCollator.compare(a.name, b.name);
+          });
+        },
+
+        sortBy(key) {
+          if (this.sortKey === key) {
+            this.sortAsc = !this.sortAsc;
+          } else {
+            this.sortKey = key;
+            // CSPだけは「高い順」から始めるのが自然
+            this.sortAsc = (key !== 'csp');
+          }
+        },
+
+        arrow(key) {
+          if (this.sortKey !== key) return '';
+          return this.sortAsc ? ' ▲' : ' ▼';
+        },
+
+        markIcon(m)  { return (MARKS[m] || {}).icon  || ''; },
+        markLabel(m) { return (MARKS[m] || {}).label || m; },
+        markStyle(m) { return (MARKS[m] || {}).style || ''; },
+
+        toggleDetail(id) {
+          this.openId = String(this.openId) === String(id) ? null : id;
+        },
+
+        // "2026-10-13" → "10/13(火)" ／ 桁を揃えて表として読みやすくする
+        formatShort(iso) {
+          if (!iso) return '';
+          const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+          if (!m) return String(iso);
+          const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+          return `${m[2]}/${m[3]}(${DOW[d.getDay()]})`;
         },
       };
     }

@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>大会記録 | ポケカ大会管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="./js/api.js"></script>
+  <script src="./js/csp.js"></script>
+  <style>[x-cloak] { display: none !important; }</style>
+</head>
+<body class="min-h-screen text-white" style="background-color:#0a0e1a;">
+
+  <!-- ===== HEADER ===== -->
+  <header x-data="{ open: false }" class="sticky top-0 z-50 shadow-lg"
+    style="background-color:#0f1629; border-bottom:2px solid #dc2626;">
+    <div class="flex items-center justify-between px-4 py-3">
+      <a href="./index.html" class="text-xl font-black tracking-tight" style="color:#fbbf24;">ポケカ大会管理</a>
+      <button @click="open = !open" class="p-2 rounded-lg" style="color:#fbbf24;" aria-label="メニュー">
+        <svg x-show="!open" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <svg x-show="open" x-cloak class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <nav x-show="open" x-cloak x-transition @click.outside="open = false" class="border-t"
+      style="background-color:#161e3a; border-color:#1e2a4a;">
+      <ul class="py-1">
+        <template x-for="item in [
+          { label: '参加予定・ランキング', href: './index.html' },
+          { label: '大会記録', href: './records.html' },
+          { label: 'メンバー', href: './member.html' },
+          { label: '管理者', href: './admin.html' },
+        ]" :key="item.href">
+          <li><a :href="item.href" @click="open = false"
+            class="block px-6 py-3 text-sm font-medium border-l-4 border-transparent transition-all"
+            style="color:#e2e8f0;"
+            onmouseover="this.style.borderLeftColor='#dc2626';this.style.backgroundColor='#1e2a4a';"
+            onmouseout="this.style.borderLeftColor='transparent';this.style.backgroundColor='';"
+            x-text="item.label"></a></li>
+        </template>
+      </ul>
+    </nav>
+  </header>
+
+  <!-- ===== MAIN ===== -->
+  <main x-data="recordsApp()" x-init="init()" class="max-w-2xl mx-auto px-4 py-6">
+
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-1 h-7 rounded-full" style="background-color:#dc2626;"></div>
+      <h2 class="text-lg font-bold tracking-wide" style="color:#fbbf24;">大会記録</h2>
+    </div>
+
+    <!-- メンバー選択（3タブ共通） -->
+    <div class="rounded-xl p-4 mb-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+      <label class="block text-sm font-medium mb-2" style="color:#94a3b8;">メンバー選択</label>
+      <select x-model="selectedMember" @change="onMemberChange()"
+        class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+        style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;">
+        <option value="">-- メンバーを選択してください --</option>
+        <template x-for="m in members" :key="m.id">
+          <option :value="m.id" x-text="m.name"></option>
+        </template>
+      </select>
+      <div x-show="leagueYears.length > 1" x-cloak class="flex gap-2 mt-3 flex-wrap">
+        <template x-for="year in leagueYears" :key="year">
+          <button @click="selectYear(year)"
+            class="px-3 py-1 rounded-lg text-xs font-bold transition-all"
+            :style="currentLeagueYear === year
+              ? 'background-color:#dc2626; color:#fff;'
+              : 'background-color:#0f1629; color:#94a3b8; border:1px solid #1e2a4a;'"
+            x-text="year"></button>
+        </template>
+      </div>
+    </div>
+
+    <!-- 大会タブ -->
+    <div class="grid grid-cols-3 gap-2 mb-5">
+      <template x-for="t in tabs" :key="t.key">
+        <button @click="switchTab(t.key)"
+          class="py-2 rounded-lg text-sm font-bold transition-all"
+          :style="tab === t.key
+            ? 'background-color:#fbbf24; color:#0a0e1a;'
+            : 'background-color:#161e3a; color:#94a3b8; border:1px solid #1e2a4a;'"
+          x-text="t.label"></button>
+      </template>
+    </div>
+
+    <div x-show="!selectedMember" x-cloak class="rounded-xl p-6 text-center"
+      style="background-color:#161e3a; border:1px solid #1e2a4a;">
+      <p class="text-sm" style="color:#64748b;">まずメンバーを選択してください</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- タブ1：シティリーグ                                            -->
+    <!-- ============================================================ -->
+    <div x-show="selectedMember && tab === 'city'" x-cloak class="space-y-5">
+
+      <!-- 参加予定を登録 -->
+      <div class="rounded-xl p-4 space-y-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+        <h3 class="text-sm font-semibold" style="color:#94a3b8;">参加予定を登録</h3>
+
+        <div>
+          <label class="block text-sm mb-1" style="color:#e2e8f0;">シーズン <span style="color:#dc2626;">*</span></label>
+          <select x-model="cityForm.season_id"
+            class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+            style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;">
+            <option value="">-- シーズンを選択 --</option>
+            <template x-for="s in yearSeasons" :key="s.id">
+              <option :value="s.id" x-text="s.name"></option>
+            </template>
+          </select>
+          <p x-show="yearSeasons.length === 0" x-cloak class="text-xs mt-1" style="color:#f87171;">
+            この年度のシーズンが未登録です。管理者画面で追加してください。
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <input type="checkbox" id="is_absent" x-model="cityForm.is_absent" class="w-5 h-5 rounded cursor-pointer" />
+          <label for="is_absent" class="text-sm cursor-pointer" style="color:#e2e8f0;">不参加</label>
+        </div>
+
+        <div x-show="!cityForm.is_absent" class="space-y-3">
+          <div>
+            <label class="block text-sm mb-1" style="color:#e2e8f0;">日付</label>
+            <input type="date" x-model="cityForm.date"
+              class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+              style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+          </div>
+          <div>
+            <label class="block text-sm mb-1" style="color:#e2e8f0;">会場</label>
+            <input type="text" x-model="cityForm.venue" placeholder="例：〇〇カードショップ"
+              class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+              style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+          </div>
+        </div>
+
+        <div x-show="cityMsg" x-cloak x-text="cityMsg" class="text-sm px-3 py-2 rounded-lg"
+          :style="cityMsgOk
+            ? 'background-color:#052e16; color:#4ade80; border:1px solid #166534;'
+            : 'background-color:#2d0a0a; color:#f87171; border:1px solid #7f1d1d;'"></div>
+
+        <button @click="registerCity()" :disabled="citySubmitting"
+          class="w-full py-2.5 rounded-lg font-bold text-sm transition-opacity hover:opacity-80"
+          style="background-color:#dc2626; color:#fff;" :style="citySubmitting ? 'opacity:0.5;' : ''">
+          <span x-show="!citySubmitting">登録する</span>
+          <span x-show="citySubmitting" x-cloak>登録中...</span>
+        </button>
+      </div>
+
+      <!-- 登録済み一覧 -->
+      <div>
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-1 h-5 rounded-full" style="background-color:#dc2626;"></div>
+          <h3 class="text-sm font-bold" style="color:#fbbf24;">登録済みシティ情報</h3>
+        </div>
+
+        <div x-show="loadingCity" class="flex justify-center py-10">
+          <svg class="animate-spin w-8 h-8" style="color:#dc2626;" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          </svg>
+        </div>
+
+        <div x-show="!loadingCity && cityEntries.length === 0" x-cloak
+          class="text-center py-10 rounded-xl" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+          <p class="text-sm" style="color:#64748b;">まだ登録がありません</p>
+        </div>
+
+        <div x-show="!loadingCity && cityEntries.length > 0" x-cloak class="space-y-3">
+          <template x-for="entry in cityEntries" :key="entry.id + '_' + entry.updated_at">
+            <div class="rounded-xl overflow-hidden" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+
+              <div class="p-4">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex-1 min-w-0 space-y-1">
+                    <p class="font-bold text-sm" style="color:#fbbf24;" x-text="seasonName(entry.season_id)"></p>
+                    <p class="text-sm" style="color:#cbd5e1;">
+                      <span x-show="entry.is_absent" class="px-2 py-0.5 rounded text-xs font-bold" style="background-color:#374151; color:#9ca3af;">不参加</span>
+                      <span x-show="!entry.is_absent && entry.date" x-text="entry.date" style="color:#94a3b8;"></span>
+                      <span x-show="!entry.is_absent && entry.venue" x-text="' ' + entry.venue" style="color:#e2e8f0;"></span>
+                      <span x-show="!entry.is_absent && !entry.date && !entry.venue" style="color:#64748b;">日程未定</span>
+                    </p>
+                    <div class="flex items-center gap-3 text-xs" style="color:#64748b;">
+                      <span>CSP: <span :style="entry.csp_earned ? 'color:#fbbf24; font-weight:bold;' : 'color:#64748b;'"
+                        x-text="entry.csp_earned != null ? entry.csp_earned + ' pt' : '—'"></span></span>
+                      <span>ステータス: <span :style="statusStyle(entry)" x-text="statusLabel(entry)"></span></span>
+                    </div>
+                  </div>
+
+                  <div class="flex flex-col gap-2 flex-shrink-0">
+                    <button @click="cityEditingId === entry.id ? cancelCityEdit() : startCityEdit(entry)"
+                      class="px-3 py-1 rounded text-xs font-bold transition-opacity hover:opacity-80"
+                      :style="cityEditingId === entry.id
+                        ? 'background-color:#374151; color:#9ca3af;'
+                        : 'background-color:#1e3a5f; color:#93c5fd;'"
+                      x-text="cityEditingId === entry.id ? 'キャンセル' : '予定を編集'"></button>
+                    <button x-show="!entry.is_absent"
+                      @click="resultEditingId === entry.id ? cancelResult() : startResult(entry)"
+                      class="px-3 py-1 rounded text-xs font-bold transition-opacity hover:opacity-80"
+                      :style="resultEditingId === entry.id
+                        ? 'background-color:#374151; color:#9ca3af;'
+                        : 'background-color:#1a2e1a; color:#4ade80;'"
+                      x-text="resultEditingId === entry.id ? 'キャンセル' : '結果入力'"></button>
+                    <button @click="openDeleteModal('city', entry.id)"
+                      class="px-3 py-1 rounded text-xs font-bold transition-opacity hover:opacity-80"
+                      style="background-color:#2d0a0a; color:#f87171;">削除</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 予定の編集 -->
+              <div x-show="cityEditingId === entry.id" x-cloak
+                class="px-4 pb-4 pt-2 border-t space-y-3" style="border-color:#1e2a4a;">
+                <p class="text-xs font-bold" style="color:#94a3b8;">参加予定を編集</p>
+                <div class="flex items-center gap-3">
+                  <input type="checkbox" :id="'edit_absent_' + entry.id" x-model="cityEditForm.is_absent" class="w-5 h-5 rounded cursor-pointer" />
+                  <label :for="'edit_absent_' + entry.id" class="text-sm cursor-pointer" style="color:#e2e8f0;">不参加</label>
+                </div>
+                <div x-show="!cityEditForm.is_absent" class="space-y-3">
+                  <div><label class="block text-xs mb-1" style="color:#94a3b8;">日付</label>
+                    <input type="date" x-model="cityEditForm.date"
+                      class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                      style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" /></div>
+                  <div><label class="block text-xs mb-1" style="color:#94a3b8;">会場</label>
+                    <input type="text" x-model="cityEditForm.venue" placeholder="例：〇〇カードショップ"
+                      class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                      style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" /></div>
+                </div>
+                <p x-show="cityEditMsg" x-cloak class="text-xs" style="color:#f87171;" x-text="cityEditMsg"></p>
+                <button @click="saveCityEdit(entry)"
+                  class="w-full py-2 rounded-lg text-xs font-bold hover:opacity-80"
+                  style="background-color:#1e3a5f; color:#93c5fd;">変更を保存</button>
+              </div>
+
+              <!-- 結果入力（旧 city_result.html をここに統合） -->
+              <div x-show="resultEditingId === entry.id" x-cloak
+                class="px-4 pb-4 pt-2 border-t space-y-3" style="border-color:#1e2a4a;">
+                <p class="text-xs font-bold" style="color:#94a3b8;">結果入力（CSP自動計算）</p>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs mb-1" style="color:#e2e8f0;">順位 <span style="color:#dc2626;">*</span></label>
+                    <input type="number" x-model.number="resultForm.rank" min="1" placeholder="例：3"
+                      class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                      style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+                  </div>
+                  <div>
+                    <label class="block text-xs mb-1" style="color:#e2e8f0;">参加人数 <span style="color:#dc2626;">*</span></label>
+                    <input type="number" x-model.number="resultForm.participants_count" min="1" placeholder="例：32"
+                      class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                      style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs mb-1" style="color:#e2e8f0;">デッキコード <span style="color:#64748b;">（任意）</span></label>
+                  <input type="text" x-model="resultForm.deck_code" placeholder="XXXXXX-XXXXXX-XXXXXX"
+                    class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                    style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+                </div>
+                <div x-show="resultForm.rank && resultForm.participants_count" x-cloak
+                  class="flex items-center gap-2 text-sm px-3 py-2 rounded-lg"
+                  style="background-color:#0a0e1a; border:1px solid #1e2a4a;">
+                  <span style="color:#94a3b8;">獲得CSP（目安）:</span>
+                  <span class="font-black tabular-nums" style="color:#fbbf24;"
+                    x-text="previewCityCSP(resultForm.rank, resultForm.participants_count) + ' pt'"></span>
+                </div>
+                <p x-show="resultMsg" x-cloak class="text-xs font-bold"
+                  :style="resultMsgOk ? 'color:#4ade80;' : 'color:#f87171;'" x-text="resultMsg"></p>
+                <button @click="saveResult(entry)" :disabled="resultSaving"
+                  class="w-full py-2 rounded-lg text-xs font-bold hover:opacity-80"
+                  style="background-color:#052e16; color:#4ade80; border:1px solid #166534;"
+                  :style="resultSaving ? 'opacity:0.5;' : ''">
+                  <span x-show="!resultSaving">結果を保存</span>
+                  <span x-show="resultSaving" x-cloak>保存中...</span>
+                </button>
+              </div>
+
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- タブ2：トレーナーズリーグ                                       -->
+    <!-- ============================================================ -->
+    <div x-show="selectedMember && tab === 'trainer'" x-cloak class="space-y-5">
+
+      <div class="rounded-xl p-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+        <h3 class="text-sm font-semibold mb-3" style="color:#94a3b8;">結果を入力</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm mb-1" style="color:#e2e8f0;">参加人数 <span style="color:#dc2626;">*</span></label>
+            <input type="number" x-model.number="trainerForm.participants_count" min="2" placeholder="例：20"
+              class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+              style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+          </div>
+          <div>
+            <label class="block text-sm mb-1" style="color:#e2e8f0;">順位 <span style="color:#dc2626;">*</span></label>
+            <input type="number" x-model.number="trainerForm.rank" min="1" placeholder="例：3"
+              class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+              style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+          </div>
+        </div>
+
+        <div x-show="trainerForm.rank && trainerForm.participants_count >= 2" x-cloak
+          class="mt-3 flex items-center gap-2 text-sm px-3 py-2 rounded-lg"
+          style="background-color:#0a0e1a; border:1px solid #1e2a4a;">
+          <span style="color:#94a3b8;">獲得CSP（目安）:</span>
+          <span class="font-black tabular-nums" style="color:#fbbf24;"
+            x-text="previewTrainerCSP(trainerForm.rank, trainerForm.participants_count, annualTotal) + ' pt'"></span>
+        </div>
+
+        <div x-show="trainerErrorMsg" x-cloak class="mt-3 px-3 py-2 rounded-lg text-sm"
+          style="background-color:#7f1d1d; color:#fca5a5;" x-text="trainerErrorMsg"></div>
+        <div x-show="trainerSuccessMsg" x-cloak class="mt-3 px-3 py-2 rounded-lg text-sm font-bold"
+          style="background-color:#064e3b; color:#6ee7b7;" x-text="trainerSuccessMsg"></div>
+        <div x-show="trainerWarningMsg" x-cloak class="mt-3 px-3 py-2 rounded-lg text-sm font-bold"
+          style="background-color:#78350f; color:#fde68a;" x-text="trainerWarningMsg"></div>
+
+        <button @click="submitTrainer()" :disabled="trainerSubmitting"
+          class="mt-4 w-full py-2.5 rounded-lg text-sm font-bold transition-opacity"
+          style="background-color:#dc2626; color:#fff;"
+          :style="trainerSubmitting ? 'opacity:0.5; cursor:not-allowed;' : ''">
+          <span x-show="!trainerSubmitting">登録する</span>
+          <span x-show="trainerSubmitting" x-cloak>登録中...</span>
+        </button>
+      </div>
+
+      <div>
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-1 h-5 rounded-full" style="background-color:#dc2626;"></div>
+          <h3 class="text-sm font-bold" style="color:#fbbf24;">登録済みトレリ履歴</h3>
+        </div>
+
+        <div x-show="loadingTrainer" class="flex justify-center py-10">
+          <svg class="animate-spin w-8 h-8" style="color:#dc2626;" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          </svg>
+        </div>
+
+        <div x-show="!loadingTrainer && trainerHistory.length === 0" x-cloak
+          class="text-center py-10 rounded-xl" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+          <p class="text-sm" style="color:#64748b;">まだ登録がありません</p>
+        </div>
+
+        <template x-if="!loadingTrainer && trainerHistory.length > 0">
+          <div>
+            <div class="mb-3 px-4 py-3 rounded-xl flex items-center justify-between" style="background-color:#1e2a4a;">
+              <span class="text-sm" style="color:#94a3b8;">年間累計CSP</span>
+              <span class="font-black text-lg tabular-nums"
+                :style="annualTotal >= 30 ? 'color:#fbbf24;' : 'color:#f1f5f9;'"
+                x-text="annualTotal + 'pt / 30pt'"></span>
+            </div>
+
+            <div class="space-y-2">
+              <template x-for="entry in trainerHistory" :key="entry.id">
+                <div class="rounded-xl px-4 py-3 flex items-center justify-between gap-3"
+                  style="background-color:#161e3a; border:1px solid #1e2a4a;">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-3 flex-wrap">
+                      <span class="text-sm" style="color:#94a3b8;">
+                        参加人数：<span style="color:#f1f5f9;" x-text="entry.participants_count"></span>人
+                      </span>
+                      <span class="text-sm" style="color:#94a3b8;">
+                        順位：<span style="color:#f1f5f9;" x-text="entry.rank"></span>位
+                      </span>
+                      <span class="text-sm font-bold px-2 py-0.5 rounded tabular-nums"
+                        style="background-color:#1e2a4a; color:#fbbf24;"
+                        x-text="'+' + entry.csp_earned + 'pt'"></span>
+                    </div>
+                    <p class="text-xs mt-1" style="color:#64748b;" x-text="formatDate(entry.created_at)"></p>
+                  </div>
+                  <button @click="openDeleteModal('trainer', entry.id)"
+                    class="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium"
+                    style="background-color:#7f1d1d; color:#fca5a5;">削除</button>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- タブ3：チャンピオンズリーグ                                     -->
+    <!-- ============================================================ -->
+    <div x-show="selectedMember && tab === 'cl'" x-cloak class="space-y-5">
+
+      <div class="rounded-xl p-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+        <h3 class="text-sm font-semibold mb-3" style="color:#94a3b8;">CL記録を入力</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm mb-1" style="color:#e2e8f0;">CL名 <span style="color:#dc2626;">*</span></label>
+            <input type="text" x-model="clForm.cl_name" placeholder="例：CL横浜2027"
+              class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+              style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+          </div>
+          <div>
+            <label class="block text-sm mb-1" style="color:#e2e8f0;">順位 <span class="text-xs" style="color:#64748b;">（任意）</span></label>
+            <input type="number" x-model.number="clForm.rank" min="1" placeholder="例：16"
+              class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+              style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm mb-1" style="color:#e2e8f0;">勝数 <span class="text-xs" style="color:#64748b;">（任意）</span></label>
+              <input type="number" x-model.number="clForm.wins" min="0" placeholder="例：7"
+                class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1" style="color:#e2e8f0;">敗数 <span class="text-xs" style="color:#64748b;">（任意）</span></label>
+              <input type="number" x-model.number="clForm.losses" min="0" placeholder="例：2"
+                class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm mb-1" style="color:#e2e8f0;">デッキコード <span class="text-xs" style="color:#64748b;">（任意）</span></label>
+            <input type="text" x-model="clForm.deck_code" placeholder="例：XXXXXX"
+              class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+              style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+          </div>
+        </div>
+
+        <div x-show="clErrorMsg" x-cloak class="mt-3 px-3 py-2 rounded-lg text-sm"
+          style="background-color:#7f1d1d; color:#fca5a5;" x-text="clErrorMsg"></div>
+        <div x-show="clSuccessMsg" x-cloak class="mt-3 px-3 py-2 rounded-lg text-sm font-bold"
+          style="background-color:#064e3b; color:#6ee7b7;" x-text="clSuccessMsg"></div>
+
+        <button @click="submitCL()" :disabled="clSubmitting"
+          class="mt-4 w-full py-2.5 rounded-lg text-sm font-bold transition-opacity"
+          style="background-color:#dc2626; color:#fff;"
+          :style="clSubmitting ? 'opacity:0.5; cursor:not-allowed;' : ''">
+          <span x-show="!clSubmitting">登録する</span>
+          <span x-show="clSubmitting" x-cloak>登録中...</span>
+        </button>
+      </div>
+
+      <div>
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-1 h-5 rounded-full" style="background-color:#dc2626;"></div>
+          <h3 class="text-sm font-bold" style="color:#fbbf24;">登録済みCL履歴</h3>
+        </div>
+
+        <div x-show="loadingCL" class="flex justify-center py-10">
+          <svg class="animate-spin w-8 h-8" style="color:#dc2626;" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          </svg>
+        </div>
+
+        <div x-show="!loadingCL && clHistory.length === 0" x-cloak
+          class="text-center py-10 rounded-xl" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+          <p class="text-sm" style="color:#64748b;">まだ登録がありません</p>
+        </div>
+
+        <div x-show="!loadingCL && clHistory.length > 0" x-cloak class="space-y-3">
+          <template x-for="entry in clHistory" :key="entry.id">
+            <div class="rounded-xl p-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
+
+              <template x-if="clEditingId !== entry.id">
+                <div>
+                  <div class="flex items-start justify-between gap-2 mb-2">
+                    <p class="font-semibold text-base truncate flex-1" style="color:#fbbf24;" x-text="entry.cl_name"></p>
+                    <div class="flex gap-2 flex-shrink-0">
+                      <button @click="startCLEdit(entry)"
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium"
+                        style="background-color:#1e3a5f; color:#93c5fd;">編集</button>
+                      <button @click="openDeleteModal('cl', entry.id)"
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium"
+                        style="background-color:#7f1d1d; color:#fca5a5;">削除</button>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm" style="color:#94a3b8;">
+                    <span x-show="entry.rank" x-cloak>順位：<span style="color:#f1f5f9;" x-text="entry.rank + '位'"></span></span>
+                    <span x-show="entry.wins !== '' && entry.wins != null" x-cloak>勝敗：<span style="color:#f1f5f9;" x-text="(entry.wins ?? '-') + '勝' + (entry.losses ?? '-') + '敗'"></span></span>
+                    <span x-show="entry.deck_code" x-cloak>デッキ：<span style="color:#f1f5f9;" x-text="entry.deck_code"></span></span>
+                  </div>
+                  <p class="text-xs mt-2" style="color:#64748b;" x-text="formatDate(entry.created_at)"></p>
+                </div>
+              </template>
+
+              <template x-if="clEditingId === entry.id">
+                <div>
+                  <h4 class="text-sm font-semibold mb-3" style="color:#fbbf24;">記録を編集</h4>
+                  <div class="space-y-3">
+                    <div>
+                      <label class="block text-xs mb-1" style="color:#94a3b8;">CL名 <span style="color:#dc2626;">*</span></label>
+                      <input type="text" x-model="clEditForm.cl_name"
+                        class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                        style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                      <div>
+                        <label class="block text-xs mb-1" style="color:#94a3b8;">順位</label>
+                        <input type="number" x-model.number="clEditForm.rank" min="1" placeholder="-"
+                          class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                          style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+                      </div>
+                      <div>
+                        <label class="block text-xs mb-1" style="color:#94a3b8;">勝数</label>
+                        <input type="number" x-model.number="clEditForm.wins" min="0" placeholder="-"
+                          class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                          style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+                      </div>
+                      <div>
+                        <label class="block text-xs mb-1" style="color:#94a3b8;">敗数</label>
+                        <input type="number" x-model.number="clEditForm.losses" min="0" placeholder="-"
+                          class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                          style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+                      </div>
+                    </div>
+                    <div>
+                      <label class="block text-xs mb-1" style="color:#94a3b8;">デッキコード</label>
+                      <input type="text" x-model="clEditForm.deck_code" placeholder="任意"
+                        class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                        style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+                    </div>
+                  </div>
+                  <div x-show="clEditErrorMsg" x-cloak class="mt-2 text-xs" style="color:#fca5a5;" x-text="clEditErrorMsg"></div>
+                  <div class="flex gap-2 mt-3">
+                    <button @click="cancelCLEdit()" class="flex-1 py-2 rounded-lg text-sm"
+                      style="background-color:#1e2a4a; color:#94a3b8;">キャンセル</button>
+                    <button @click="saveCLEdit(entry.id)" :disabled="clEditSaving"
+                      class="flex-1 py-2 rounded-lg text-sm font-bold"
+                      style="background-color:#dc2626; color:#fff;"
+                      :style="clEditSaving ? 'opacity:0.5;' : ''">
+                      <span x-show="!clEditSaving">保存</span>
+                      <span x-show="clEditSaving" x-cloak>保存中...</span>
+                    </button>
+                  </div>
+                </div>
+              </template>
+
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 削除確認モーダル（3タブ共通） ===== -->
+    <div x-show="showDeleteModal" x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style="background-color:rgba(0,0,0,0.75);">
+      <div class="rounded-xl p-5 w-full max-w-sm" style="background-color:#161e3a; border:2px solid #dc2626;">
+        <h3 class="text-base font-bold mb-2" style="color:#fbbf24;">記録を削除しますか？</h3>
+        <p class="text-sm mb-4" style="color:#94a3b8;">この操作は取り消せません。</p>
+        <div class="mb-4">
+          <label class="block text-sm mb-1" style="color:#e2e8f0;">管理者パスワード（本人の場合は空欄可）</label>
+          <input type="password" x-model="deletePassword" placeholder="パスワード" @keydown.enter="confirmDelete()"
+            class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+            style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;" />
+        </div>
+        <div x-show="deleteErrorMsg" x-cloak class="mb-3 text-sm" style="color:#fca5a5;" x-text="deleteErrorMsg"></div>
+        <div class="flex gap-3">
+          <button @click="closeDeleteModal()"
+            class="flex-1 py-2 rounded-lg text-sm font-medium"
+            style="background-color:#1e2a4a; color:#94a3b8;">キャンセル</button>
+          <button @click="confirmDelete()" :disabled="deleting"
+            class="flex-1 py-2 rounded-lg text-sm font-bold"
+            style="background-color:#dc2626; color:#fff;" :style="deleting ? 'opacity:0.5;' : ''">
+            <span x-show="!deleting">削除する</span>
+            <span x-show="deleting" x-cloak>削除中...</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="mt-10 py-6 px-4 text-center border-t" style="border-color:#1e2a4a;">
+    <p class="text-xs" style="color:#64748b;">※ CLはCSP付与なし・記録のみ。ランキングはコミュニティ内の順位です。</p>
+  </footer>
+
+  <script>
+    function recordsApp() {
+      return {
+        // ---- 共通 ----
+        tab: 'city',
+        tabs: [
+          { key: 'city',    label: 'シティ' },
+          { key: 'trainer', label: 'トレリ' },
+          { key: 'cl',      label: 'CL' },
+        ],
+        members: [],
+        seasons: [],
+        selectedMember: '',
+        leagueYears: [],
+        currentLeagueYear: '',
+
+        // ---- シティ ----
+        cityAll: [],
+        loadingCity: false,
+        cityForm: { season_id: '', is_absent: false, date: '', venue: '' },
+        cityMsg: '', cityMsgOk: false, citySubmitting: false,
+        cityEditingId: null,
+        cityEditForm: { is_absent: false, date: '', venue: '' },
+        cityEditMsg: '',
+        resultEditingId: null,
+        resultForm: { rank: '', participants_count: '', deck_code: '' },
+        resultMsg: '', resultMsgOk: false, resultSaving: false,
+
+        // ---- トレリ ----
+        trainerAll: [],
+        loadingTrainer: false,
+        trainerForm: { participants_count: '', rank: '' },
+        trainerSuccessMsg: '', trainerWarningMsg: '', trainerErrorMsg: '', trainerSubmitting: false,
+
+        // ---- CL ----
+        clAll: [],
+        loadingCL: false,
+        clForm: { cl_name: '', rank: '', wins: '', losses: '', deck_code: '' },
+        clSuccessMsg: '', clErrorMsg: '', clSubmitting: false,
+        clEditingId: null, clEditForm: {}, clEditErrorMsg: '', clEditSaving: false,
+
+        // ---- 削除モーダル（共通） ----
+        showDeleteModal: false,
+        deleteKind: '',
+        deleteTargetId: null,
+        deletePassword: '',
+        deleteErrorMsg: '',
+        deleting: false,
+
+        async init() {
+          // 年度一覧は seasons から導けるので getLeagueYears は呼ばない（GAS呼び出しを1本減らす）
+          const [mRes, sRes] = await Promise.allSettled([
+            gasGet('getMembers'),
+            gasGet('getSeasons'),
+          ]);
+          if (mRes.status === 'fulfilled') this.members = mRes.value;
+          else console.error('メンバー取得エラー:', mRes.reason);
+          if (sRes.status === 'fulfilled') this.seasons = sRes.value;
+          else console.error('シーズン取得エラー:', sRes.reason);
+
+          this.leagueYears = [...new Set(this.seasons.map(s => s.league_year).filter(Boolean))].sort();
+          if (this.leagueYears.length > 0) {
+            this.currentLeagueYear = this.leagueYears[this.leagueYears.length - 1];
+          }
+        },
+
+        get yearSeasons() {
+          return this.seasons
+            .filter(s => !this.currentLeagueYear || s.league_year === this.currentLeagueYear)
+            .sort((a, b) => Number(a.season_number) - Number(b.season_number));
+        },
+
+        selectYear(year) {
+          this.currentLeagueYear = year;
+          this.cityForm.season_id = '';
+          this.clearMessages();
+        },
+
+        switchTab(key) {
+          this.tab = key;
+          this.clearMessages();
+          if (this.selectedMember) this.loadTab(key);
+        },
+
+        async onMemberChange() {
+          this.clearMessages();
+          this.cityEditingId = null;
+          this.resultEditingId = null;
+          this.clEditingId = null;
+          if (this.selectedMember) await this.loadTab(this.tab);
+        },
+
+        async loadTab(key) {
+          if (key === 'city')    return this.fetchCity();
+          if (key === 'trainer') return this.fetchTrainer();
+          if (key === 'cl')      return this.fetchCL();
+        },
+
+        clearMessages() {
+          this.cityMsg = ''; this.cityEditMsg = ''; this.resultMsg = '';
+          this.trainerSuccessMsg = ''; this.trainerWarningMsg = ''; this.trainerErrorMsg = '';
+          this.clSuccessMsg = ''; this.clErrorMsg = ''; this.clEditErrorMsg = '';
+        },
+
+        // ================= シティ =================
+
+        async fetchCity() {
+          this.loadingCity = true;
+          try { this.cityAll = await gasGet('getCity'); }
+          catch (e) { console.error('シティ取得エラー:', e); }
+          finally { this.loadingCity = false; }
+        },
+
+        // 選択中メンバー＆選択中年度のエントリーのみ
+        get cityEntries() {
+          const ids = this.yearSeasons.map(s => String(s.id));
+          return this.cityAll
+            .filter(e => String(e.member_id) === String(this.selectedMember))
+            .filter(e => ids.includes(String(e.season_id)))
+            .sort((a, b) => Number(a.season_id) - Number(b.season_id));
+        },
+
+        seasonName(seasonId) {
+          const s = this.seasons.find(x => String(x.id) === String(seasonId));
+          return s ? s.name : 'シーズン ' + seasonId;
+        },
+
+        statusLabel(entry) {
+          if (entry.is_absent) return '不参加';
+          if (entry.rank) return entry.rank + '位 結果入力済み';
+          if (entry.date) return '参加予定';
+          return '未入力';
+        },
+
+        statusStyle(entry) {
+          if (entry.is_absent) return 'color:#6b7280;';
+          if (entry.rank) return 'color:#4ade80; font-weight:bold;';
+          if (entry.date) return 'color:#93c5fd;';
+          return 'color:#64748b;';
+        },
+
+        async registerCity() {
+          this.cityMsg = '';
+          if (!this.selectedMember) { this.cityMsg = 'メンバーを選択してください'; this.cityMsgOk = false; return; }
+          if (!this.cityForm.season_id) { this.cityMsg = 'シーズンを選択してください'; this.cityMsgOk = false; return; }
+
+          this.citySubmitting = true;
+          try {
+            await gasPost({
+              action: 'addCity',
+              member_id: parseInt(this.selectedMember),
+              season_id: parseInt(this.cityForm.season_id),
+              is_absent: this.cityForm.is_absent ? 1 : 0,
+              date:  this.cityForm.is_absent ? '' : (this.cityForm.date || ''),
+              venue: this.cityForm.is_absent ? '' : (this.cityForm.venue || ''),
+            });
+            this.cityMsg = '登録しました';
+            this.cityMsgOk = true;
+            this.cityForm = { season_id: '', is_absent: false, date: '', venue: '' };
+            await this.fetchCity();
+          } catch (e) {
+            this.cityMsg = e.message || '登録に失敗しました';
+            this.cityMsgOk = false;
+          } finally {
+            this.citySubmitting = false;
+          }
+        },
+
+        startCityEdit(entry) {
+          this.resultEditingId = null;
+          this.cityEditingId = entry.id;
+          this.cityEditForm = { is_absent: !!entry.is_absent, date: entry.date || '', venue: entry.venue || '' };
+          this.cityEditMsg = '';
+        },
+
+        cancelCityEdit() { this.cityEditingId = null; this.cityEditMsg = ''; },
+
+        async saveCityEdit(entry) {
+          this.cityEditMsg = '';
+          try {
+            await gasPost({
+              action: 'updateCity',
+              id: entry.id,
+              member_id: parseInt(this.selectedMember),
+              is_absent: this.cityEditForm.is_absent ? 1 : 0,
+              date:  this.cityEditForm.is_absent ? '' : (this.cityEditForm.date || ''),
+              venue: this.cityEditForm.is_absent ? '' : (this.cityEditForm.venue || ''),
+              // 結果は触らないのでそのまま送り返す
+              rank: entry.rank || '',
+              participants_count: entry.participants_count || '',
+              deck_code: entry.deck_code || '',
+            });
+            this.cityEditingId = null;
+            await this.fetchCity();
+          } catch (e) {
+            this.cityEditMsg = e.message || '更新に失敗しました';
+          }
+        },
+
+        startResult(entry) {
+          this.cityEditingId = null;
+          this.resultEditingId = entry.id;
+          this.resultForm = {
+            rank: entry.rank || '',
+            participants_count: entry.participants_count || '',
+            deck_code: entry.deck_code || '',
+          };
+          this.resultMsg = '';
+        },
+
+        cancelResult() { this.resultEditingId = null; this.resultMsg = ''; },
+
+        async saveResult(entry) {
+          this.resultMsg = '';
+          const rank = parseInt(this.resultForm.rank);
+          const participants = parseInt(this.resultForm.participants_count);
+          if (!rank || rank < 1) { this.resultMsg = '順位を入力してください'; this.resultMsgOk = false; return; }
+          if (!participants || participants < 1) { this.resultMsg = '参加人数を入力してください'; this.resultMsgOk = false; return; }
+
+          this.resultSaving = true;
+          try {
+            const result = await gasPost({
+              action: 'updateCity',
+              id: entry.id,
+              member_id: parseInt(this.selectedMember),
+              is_absent: 0,
+              date:  entry.date || '',
+              venue: entry.venue || '',
+              rank,
+              participants_count: participants,
+              deck_code: this.resultForm.deck_code || '',
+            });
+            const earned = result.csp_earned ?? previewCityCSP(rank, participants);
+            this.resultMsg = `結果を保存しました！獲得CSP: ${earned}pt`;
+            this.resultMsgOk = true;
+            await this.fetchCity();
+          } catch (e) {
+            this.resultMsg = e.message || '保存に失敗しました';
+            this.resultMsgOk = false;
+          } finally {
+            this.resultSaving = false;
+          }
+        },
+
+        // ================= トレリ =================
+
+        async fetchTrainer() {
+          this.loadingTrainer = true;
+          try { this.trainerAll = await gasGet('getTrainer'); }
+          catch (e) { console.error('トレリ取得エラー:', e); }
+          finally { this.loadingTrainer = false; }
+        },
+
+        get trainerHistory() {
+          return this.trainerAll
+            .filter(e => String(e.member_id) === String(this.selectedMember))
+            .filter(e => String(e.league_year) === String(this.currentLeagueYear));
+        },
+
+        get annualTotal() {
+          return this.trainerHistory.reduce((sum, e) => sum + (Number(e.csp_earned) || 0), 0);
+        },
+
+        async submitTrainer() {
+          this.trainerSuccessMsg = ''; this.trainerWarningMsg = ''; this.trainerErrorMsg = '';
+          if (!this.selectedMember) { this.trainerErrorMsg = 'メンバーを選択してください。'; return; }
+          if (!this.trainerForm.participants_count || this.trainerForm.participants_count < 2) {
+            this.trainerErrorMsg = '参加人数は2以上を入力してください。'; return;
+          }
+          if (!this.trainerForm.rank || this.trainerForm.rank < 1) { this.trainerErrorMsg = '順位を入力してください。'; return; }
+          if (!this.currentLeagueYear) { this.trainerErrorMsg = '年度が取得できませんでした。再読み込みしてください。'; return; }
+
+          this.trainerSubmitting = true;
+          try {
+            const data = await gasPost({
+              action: 'addTrainer',
+              member_id: parseInt(this.selectedMember),
+              participants_count: this.trainerForm.participants_count,
+              rank: this.trainerForm.rank,
+              league_year: this.currentLeagueYear,
+            });
+            await this.fetchTrainer();
+            this.trainerSuccessMsg = `+${data.csp_earned}pt 獲得！年間累計：${this.annualTotal}pt / 30pt`;
+            if (this.annualTotal >= 30) {
+              this.trainerWarningMsg = '年間上限30ptに達しました。これ以上CSPは加算されません。';
+            }
+            this.trainerForm.participants_count = '';
+            this.trainerForm.rank = '';
+          } catch (e) {
+            this.trainerErrorMsg = e.message || '登録に失敗しました。';
+          } finally {
+            this.trainerSubmitting = false;
+          }
+        },
+
+        // ================= CL =================
+
+        async fetchCL() {
+          this.loadingCL = true;
+          try { this.clAll = await gasGet('getCL'); }
+          catch (e) { console.error('CL取得エラー:', e); }
+          finally { this.loadingCL = false; }
+        },
+
+        get clHistory() {
+          return this.clAll.filter(e => String(e.member_id) === String(this.selectedMember));
+        },
+
+        async submitCL() {
+          this.clSuccessMsg = ''; this.clErrorMsg = '';
+          if (!this.selectedMember) { this.clErrorMsg = 'メンバーを選択してください。'; return; }
+          if (!this.clForm.cl_name.trim()) { this.clErrorMsg = 'CL名を入力してください。'; return; }
+
+          this.clSubmitting = true;
+          try {
+            await gasPost({
+              action: 'addCL',
+              member_id: parseInt(this.selectedMember),
+              cl_name: this.clForm.cl_name.trim(),
+              rank:   this.clForm.rank   !== '' ? this.clForm.rank   : '',
+              wins:   this.clForm.wins   !== '' ? this.clForm.wins   : '',
+              losses: this.clForm.losses !== '' ? this.clForm.losses : '',
+              deck_code: this.clForm.deck_code.trim(),
+            });
+            this.clSuccessMsg = '登録しました！';
+            this.clForm = { cl_name: '', rank: '', wins: '', losses: '', deck_code: '' };
+            await this.fetchCL();
+          } catch (e) {
+            this.clErrorMsg = e.message || '登録に失敗しました。';
+          } finally {
+            this.clSubmitting = false;
+          }
+        },
+
+        startCLEdit(entry) {
+          this.clEditingId = entry.id;
+          this.clEditForm = {
+            cl_name: entry.cl_name,
+            rank: entry.rank ?? '',
+            wins: entry.wins ?? '',
+            losses: entry.losses ?? '',
+            deck_code: entry.deck_code ?? '',
+          };
+          this.clEditErrorMsg = '';
+        },
+
+        cancelCLEdit() { this.clEditingId = null; this.clEditErrorMsg = ''; },
+
+        async saveCLEdit(id) {
+          this.clEditErrorMsg = '';
+          if (!this.clEditForm.cl_name.trim()) { this.clEditErrorMsg = 'CL名を入力してください。'; return; }
+          this.clEditSaving = true;
+          try {
+            await gasPost({
+              action: 'updateCL',
+              id,
+              member_id: parseInt(this.selectedMember),
+              cl_name: this.clEditForm.cl_name.trim(),
+              rank:   this.clEditForm.rank   !== '' ? this.clEditForm.rank   : '',
+              wins:   this.clEditForm.wins   !== '' ? this.clEditForm.wins   : '',
+              losses: this.clEditForm.losses !== '' ? this.clEditForm.losses : '',
+              deck_code: this.clEditForm.deck_code.trim(),
+            });
+            this.clEditingId = null;
+            await this.fetchCL();
+          } catch (e) {
+            this.clEditErrorMsg = e.message || '保存に失敗しました。';
+          } finally {
+            this.clEditSaving = false;
+          }
+        },
+
+        // ================= 削除（共通） =================
+
+        openDeleteModal(kind, id) {
+          this.deleteKind = kind;
+          this.deleteTargetId = id;
+          this.deletePassword = '';
+          this.deleteErrorMsg = '';
+          this.showDeleteModal = true;
+        },
+
+        closeDeleteModal() {
+          this.showDeleteModal = false;
+          this.deletePassword = '';
+          this.deleteErrorMsg = '';
+        },
+
+        async confirmDelete() {
+          const actionMap = { city: 'deleteCity', trainer: 'deleteTrainer', cl: 'deleteCL' };
+          this.deleteErrorMsg = '';
+          this.deleting = true;
+          try {
+            await gasPost({
+              action: actionMap[this.deleteKind],
+              id: this.deleteTargetId,
+              member_id: parseInt(this.selectedMember),
+              admin_password: this.deletePassword || undefined,
+            });
+            this.showDeleteModal = false;
+            this.deletePassword = '';
+            if (this.deleteKind === 'city')    { this.cityEditingId = null; this.resultEditingId = null; await this.fetchCity(); }
+            if (this.deleteKind === 'trainer') await this.fetchTrainer();
+            if (this.deleteKind === 'cl')      { this.clEditingId = null; await this.fetchCL(); }
+          } catch (e) {
+            this.deleteErrorMsg = e.message || '削除に失敗しました。';
+          } finally {
+            this.deleting = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

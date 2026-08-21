@@ -26,12 +26,9 @@
       style="background-color:#161e3a; border-color:#1e2a4a;">
       <ul class="py-1">
         <template x-for="item in [
-          { label: 'ランキング', href: './index.html' },
-          { label: 'メンバー登録', href: './member.html' },
-          { label: 'シティリーグ', href: './city.html' },
-          { label: 'トレリ', href: './trainer.html' },
-          { label: 'CL記録', href: './cl.html' },
-          { label: 'カレンダー', href: './calendar.html' },
+          { label: '参加予定・ランキング', href: './index.html' },
+          { label: '大会記録', href: './records.html' },
+          { label: 'メンバー', href: './member.html' },
           { label: '管理者', href: './admin.html' },
         ]" :key="item.href">
           <li><a :href="item.href" @click="open = false"
@@ -116,29 +113,20 @@
               </div>
             </div>
 
-            <!-- バッジ管理 -->
+            <!-- 出場権バッジ（表示のみ。付与・削除は管理者画面から） -->
             <div class="rounded-xl p-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
               <div class="flex items-center gap-2 mb-3">
                 <div class="w-1 h-5 rounded-full" style="background-color:#dc2626;"></div>
                 <h3 class="text-sm font-bold" style="color:#fbbf24;">出場権バッジ</h3>
               </div>
-              <p class="text-xs mb-3" style="color:#64748b;">取得した出場権をON/OFFしてください</p>
               <div class="flex gap-2 flex-wrap">
-                <button @click="toggleMark('WCS')"
-                  class="px-3 py-1.5 rounded-lg text-sm font-bold transition-opacity hover:opacity-80"
-                  :style="hasMark('WCS') ? 'background-color:#7c3aed; color:#fff;' : 'background-color:#1e2a4a; color:#64748b;'">
-                  🏆🌍 WCS</button>
-                <button @click="toggleMark('JCS')"
-                  class="px-3 py-1.5 rounded-lg text-sm font-bold transition-opacity hover:opacity-80"
-                  :style="hasMark('JCS') ? 'background-color:#dc2626; color:#fff;' : 'background-color:#1e2a4a; color:#64748b;'">
-                  🏆🇯🇵 JCS</button>
-                <button @click="toggleMark('CL')"
-                  class="px-3 py-1.5 rounded-lg text-sm font-bold transition-opacity hover:opacity-80"
-                  :style="hasMark('CL') ? 'background-color:#0369a1; color:#fff;' : 'background-color:#1e2a4a; color:#64748b;'">
-                  🏆🎯 次回CL</button>
+                <template x-for="b in badgeList" :key="b.key">
+                  <span class="px-3 py-1.5 rounded-lg text-sm font-bold"
+                    :style="hasMark(b.key) ? b.onStyle : 'background-color:#1e2a4a; color:#475569;'"
+                    x-text="b.label"></span>
+                </template>
               </div>
-              <p x-show="markMsg" x-cloak class="mt-2 text-xs font-medium"
-                :style="markMsgOk ? 'color:#4ade80;' : 'color:#f87171;'" x-text="markMsg"></p>
+              <p class="text-xs mt-3" style="color:#64748b;">バッジの付与・削除は管理者が行います。</p>
             </div>
 
             <!-- CSP内訳：シティリーグ -->
@@ -410,9 +398,12 @@
         deleteError: '',
         deleteLoading: false,
 
-        // バッジ
-        markMsg: '',
-        markMsgOk: false,
+        // 出場権バッジ（表示のみ。更新は管理者画面）
+        badgeList: [
+          { key: 'WCS', label: '🏆🌍 WCS',    onStyle: 'background-color:#7c3aed; color:#fff;' },
+          { key: 'JCS', label: '🏆🇯🇵 JCS',    onStyle: 'background-color:#dc2626; color:#fff;' },
+          { key: 'CL',  label: '🏆🎯 次回CL',  onStyle: 'background-color:#0369a1; color:#fff;' },
+        ],
 
         async init() {
           const params = new URLSearchParams(window.location.search);
@@ -536,30 +527,6 @@
           return this.detail?.member?.marks
             ? this.detail.member.marks.split(',').includes(mark)
             : false;
-        },
-
-        async toggleMark(mark) {
-          const current = this.detail?.member?.marks
-            ? this.detail.member.marks.split(',').filter(Boolean)
-            : [];
-          const newMarks = current.includes(mark)
-            ? current.filter(x => x !== mark)
-            : [...current, mark];
-          try {
-            await gasPost({
-              action: 'updateMemberMarks',
-              member_id: this.detail.member.id,
-              id: this.detail.member.id,
-              marks: newMarks.join(','),
-            });
-            this.detail.member.marks = newMarks.join(',');
-            this.markMsg = (newMarks.includes(mark) ? '付与' : '削除') + 'しました: ' + mark;
-            this.markMsgOk = true;
-            setTimeout(() => { this.markMsg = ''; }, 3000);
-          } catch (e) {
-            this.markMsg = e.message || 'バッジ更新に失敗しました';
-            this.markMsgOk = false;
-          }
         },
 
         async confirmDelete() {
