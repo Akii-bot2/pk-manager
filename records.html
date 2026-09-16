@@ -53,7 +53,7 @@
     <!-- メンバー選択（3タブ共通） -->
     <div class="rounded-xl p-4 mb-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
       <label class="block text-sm font-medium mb-2" style="color:#94a3b8;">メンバー選択</label>
-      <select x-model="selectedMember" @change="onMemberChange()"
+      <select x-ref="memberSelect" x-model="selectedMember" @change="onMemberChange()"
         class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
         style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;">
         <option value="">-- メンバーを選択してください --</option>
@@ -85,6 +85,14 @@
       </template>
     </div>
 
+    <!-- メンバー一覧を取得できず、保存データも無いとき -->
+    <div x-show="initError" x-cloak class="rounded-xl p-4 mb-4 text-sm flex items-center gap-3"
+      style="background-color:#2d0a0a; color:#fca5a5; border:1px solid #7f1d1d;">
+      <span x-text="initError"></span>
+      <button @click="initError = ''; init()" class="ml-auto flex-shrink-0 px-3 py-1 rounded font-bold text-xs"
+        style="background-color:#1e2a4a; color:#e2e8f0;">再読み込み</button>
+    </div>
+
     <div x-show="!selectedMember" x-cloak class="rounded-xl p-6 text-center"
       style="background-color:#161e3a; border:1px solid #1e2a4a;">
       <p class="text-sm" style="color:#64748b;">まずメンバーを選択してください</p>
@@ -101,7 +109,7 @@
 
         <div>
           <label class="block text-sm mb-1" style="color:#e2e8f0;">シーズン <span style="color:#dc2626;">*</span></label>
-          <select x-model="cityForm.season_id"
+          <select x-ref="seasonSelect" x-model="cityForm.season_id"
             class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
             style="background-color:#0f1629; border:1px solid #1e2a4a; color:#f1f5f9;">
             <option value="">-- シーズンを選択 --</option>
@@ -161,12 +169,21 @@
           </svg>
         </div>
 
-        <div x-show="!loadingCity && cityEntries.length === 0" x-cloak
+        <!-- 一覧を取得できなかったとき。「まだ登録がありません」と誤解して二重登録しないよう、はっきり出す -->
+        <div x-show="!loadingCity && cityLoadError" x-cloak class="rounded-xl p-4 text-sm"
+          style="background-color:#2d0a0a; color:#fca5a5; border:1px solid #7f1d1d;">
+          <p x-text="cityLoadError"></p>
+          <p class="text-xs mt-1">登録済みの内容を確認できないため、登録する前に再読み込みしてください。</p>
+          <button @click="fetchCity()" class="mt-3 px-3 py-1 rounded font-bold text-xs"
+            style="background-color:#1e2a4a; color:#e2e8f0;">再読み込み</button>
+        </div>
+
+        <div x-show="!loadingCity && !cityLoadError && cityEntries.length === 0" x-cloak
           class="text-center py-10 rounded-xl" style="background-color:#161e3a; border:1px solid #1e2a4a;">
           <p class="text-sm" style="color:#64748b;">まだ登録がありません</p>
         </div>
 
-        <div x-show="!loadingCity && cityEntries.length > 0" x-cloak class="space-y-3">
+        <div x-show="!loadingCity && !cityLoadError && cityEntries.length > 0" x-cloak class="space-y-3">
           <template x-for="entry in cityEntries" :key="entry.id + '_' + entry.updated_at">
             <div class="rounded-xl overflow-hidden" style="background-color:#161e3a; border:1px solid #1e2a4a;">
 
@@ -339,12 +356,21 @@
           </svg>
         </div>
 
-        <div x-show="!loadingTrainer && trainerHistory.length === 0" x-cloak
+        <!-- 一覧を取得できなかったとき。「まだ登録がありません」と誤解して二重登録しないよう、はっきり出す -->
+        <div x-show="!loadingTrainer && trainerLoadError" x-cloak class="rounded-xl p-4 text-sm"
+          style="background-color:#2d0a0a; color:#fca5a5; border:1px solid #7f1d1d;">
+          <p x-text="trainerLoadError"></p>
+          <p class="text-xs mt-1">登録済みの内容と年間累計を確認できないため、登録する前に再読み込みしてください。</p>
+          <button @click="fetchTrainer()" class="mt-3 px-3 py-1 rounded font-bold text-xs"
+            style="background-color:#1e2a4a; color:#e2e8f0;">再読み込み</button>
+        </div>
+
+        <div x-show="!loadingTrainer && !trainerLoadError && trainerHistory.length === 0" x-cloak
           class="text-center py-10 rounded-xl" style="background-color:#161e3a; border:1px solid #1e2a4a;">
           <p class="text-sm" style="color:#64748b;">まだ登録がありません</p>
         </div>
 
-        <template x-if="!loadingTrainer && trainerHistory.length > 0">
+        <template x-if="!loadingTrainer && !trainerLoadError && trainerHistory.length > 0">
           <div>
             <div class="mb-3 px-4 py-3 rounded-xl flex items-center justify-between" style="background-color:#1e2a4a;">
               <span class="text-sm" style="color:#94a3b8;">年間累計CSP</span>
@@ -451,12 +477,21 @@
           </svg>
         </div>
 
-        <div x-show="!loadingCL && clHistory.length === 0" x-cloak
+        <!-- 一覧を取得できなかったとき。「まだ登録がありません」と誤解して二重登録しないよう、はっきり出す -->
+        <div x-show="!loadingCL && clLoadError" x-cloak class="rounded-xl p-4 text-sm"
+          style="background-color:#2d0a0a; color:#fca5a5; border:1px solid #7f1d1d;">
+          <p x-text="clLoadError"></p>
+          <p class="text-xs mt-1">登録済みの内容を確認できないため、登録する前に再読み込みしてください。</p>
+          <button @click="fetchCL()" class="mt-3 px-3 py-1 rounded font-bold text-xs"
+            style="background-color:#1e2a4a; color:#e2e8f0;">再読み込み</button>
+        </div>
+
+        <div x-show="!loadingCL && !clLoadError && clHistory.length === 0" x-cloak
           class="text-center py-10 rounded-xl" style="background-color:#161e3a; border:1px solid #1e2a4a;">
           <p class="text-sm" style="color:#64748b;">まだ登録がありません</p>
         </div>
 
-        <div x-show="!loadingCL && clHistory.length > 0" x-cloak class="space-y-3">
+        <div x-show="!loadingCL && !clLoadError && clHistory.length > 0" x-cloak class="space-y-3">
           <template x-for="entry in clHistory" :key="entry.id">
             <div class="rounded-xl p-4" style="background-color:#161e3a; border:1px solid #1e2a4a;">
 
@@ -624,21 +659,56 @@
         deleteErrorMsg: '',
         deleting: false,
 
+        // ---- 通信状態 ----
+        initError: '',         // メンバー一覧を取得できず、保存データも無いとき
+        cityLoadError: '',     // 各タブの登録済み一覧を取得できなかったとき
+        trainerLoadError: '',
+        clLoadError: '',
+
         async init() {
+          // ① 前回のメンバー・シーズン一覧が端末に残っていれば、プルダウンをGASを待たずに出す
+          //    （登録済み一覧は、古いものを見て二重登録されないよう保存データを使わず毎回取得する）
+          const cachedMembers = readGasCache('getMembers');
+          const cachedSeasons = readGasCache('getSeasons');
+          if (cachedMembers) this.setMembers(cachedMembers.data);
+          if (cachedSeasons) this.applySeasons(cachedSeasons.data);
+
+          // ② 裏で最新を取る
           // 年度一覧は seasons から導けるので getLeagueYears は呼ばない（GAS呼び出しを1本減らす）
           const [mRes, sRes] = await Promise.allSettled([
             gasGet('getMembers'),
             gasGet('getSeasons'),
           ]);
-          if (mRes.status === 'fulfilled') this.members = mRes.value;
+          if (mRes.status === 'fulfilled') this.setMembers(mRes.value);
           else console.error('メンバー取得エラー:', mRes.reason);
-          if (sRes.status === 'fulfilled') this.seasons = sRes.value;
+          if (sRes.status === 'fulfilled') this.applySeasons(sRes.value);
           else console.error('シーズン取得エラー:', sRes.reason);
 
-          this.leagueYears = [...new Set(this.seasons.map(s => s.league_year).filter(Boolean))].sort();
-          if (this.leagueYears.length > 0) {
-            this.currentLeagueYear = this.leagueYears[this.leagueYears.length - 1];
+          if (mRes.status === 'rejected' && this.members.length === 0) {
+            this.initError = mRes.reason.message || 'メンバー一覧の取得に失敗しました。';
           }
+        },
+
+        // 中身が同じなら差し替えない。差し替えた場合は、選択中のメンバーをプルダウンに表示し直す
+        // （選択肢を作り直すと、見た目の選択だけが外れることがあるため）
+        setMembers(list) {
+          if (JSON.stringify(list) === JSON.stringify(this.members)) return;
+          this.members = list;
+          this.$nextTick(() => {
+            if (this.$refs.memberSelect) this.$refs.memberSelect.value = this.selectedMember;
+          });
+        },
+
+        applySeasons(seasons) {
+          if (JSON.stringify(seasons) === JSON.stringify(this.seasons)) return;
+          this.seasons = seasons;
+          this.leagueYears = [...new Set(seasons.map(s => s.league_year).filter(Boolean))].sort();
+          if (!this.leagueYears.includes(this.currentLeagueYear)) {
+            this.currentLeagueYear = this.leagueYears.length > 0 ? this.leagueYears[this.leagueYears.length - 1] : '';
+          }
+          this.$nextTick(() => {
+            if (this.$refs.seasonSelect) this.$refs.seasonSelect.value = this.cityForm.season_id;
+          });
         },
 
         get yearSeasons() {
@@ -683,8 +753,9 @@
 
         async fetchCity() {
           this.loadingCity = true;
+          this.cityLoadError = '';
           try { this.cityAll = await gasGet('getCity'); }
-          catch (e) { console.error('シティ取得エラー:', e); }
+          catch (e) { console.error('シティ取得エラー:', e); this.cityLoadError = e.message || '登録済みシティ情報の取得に失敗しました。'; }
           finally { this.loadingCity = false; }
         },
 
@@ -823,8 +894,9 @@
 
         async fetchTrainer() {
           this.loadingTrainer = true;
+          this.trainerLoadError = '';
           try { this.trainerAll = await gasGet('getTrainer'); }
-          catch (e) { console.error('トレリ取得エラー:', e); }
+          catch (e) { console.error('トレリ取得エラー:', e); this.trainerLoadError = e.message || 'トレリ履歴の取得に失敗しました。'; }
           finally { this.loadingTrainer = false; }
         },
 
@@ -874,8 +946,9 @@
 
         async fetchCL() {
           this.loadingCL = true;
+          this.clLoadError = '';
           try { this.clAll = await gasGet('getCL'); }
-          catch (e) { console.error('CL取得エラー:', e); }
+          catch (e) { console.error('CL取得エラー:', e); this.clLoadError = e.message || 'CL履歴の取得に失敗しました。'; }
           finally { this.loadingCL = false; }
         },
 

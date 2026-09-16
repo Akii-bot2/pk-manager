@@ -54,6 +54,18 @@
       <h2 class="text-lg font-bold tracking-wide" style="color:#fbbf24;">シティリーグ参加予定・CSPランキング</h2>
     </div>
 
+    <!-- 保存データを表示しながら最新を取得している間／最新の取得に失敗したときの案内 -->
+    <div x-show="!loading && !loadError && (refreshing || refreshError)" x-cloak
+      class="mb-3 px-3 py-2 rounded-lg text-xs flex items-center gap-2"
+      :style="refreshError
+        ? 'background-color:#2d0a0a; color:#fca5a5; border:1px solid #7f1d1d;'
+        : 'background-color:#0f1629; color:#94a3b8; border:1px solid #1e2a4a;'">
+      <svg x-show="refreshing" class="animate-spin w-3.5 h-3.5 flex-shrink-0" style="color:#fbbf24;" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+      <span x-text="refreshError || ('最新データを取得中…（' + formatCacheAge(oldestSavedAt) + 'のデータを表示中）')"></span>
+      <button x-show="refreshError && !refreshing" x-cloak @click="refresh()"
+        class="ml-auto flex-shrink-0 px-2 py-0.5 rounded font-bold" style="background-color:#1e2a4a; color:#e2e8f0;">再取得</button>
+    </div>
+
     <!-- 年度タブ -->
     <div x-show="leagueYears.length > 1" x-cloak class="flex gap-2 mb-3 flex-wrap">
       <template x-for="year in leagueYears" :key="year">
@@ -85,6 +97,9 @@
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
       </svg>
       <span class="text-sm" style="color:#94a3b8;">読み込み中...</span>
+      <span x-show="slowHint" x-cloak class="text-xs text-center px-6" style="color:#64748b;">
+        サーバーが混み合っています。表示まで最大45秒ほどかかることがあります。<br>次回からは前回のデータをすぐに表示します。
+      </span>
     </div>
 
     <div x-show="!loading && loadError" x-cloak class="rounded-xl p-6 text-center"
@@ -266,31 +281,108 @@
         sortKey: 'date',
         sortAsc: true,
 
+        // ---- 通信状態（端末の保存データを先に表示し、裏で最新を取る） ----
+        refreshError: '',     // 最新の取得に失敗したが、保存データで表示は続けているとき
+        pending: 0,           // 裏で実行中の取得の数
+        rankingRequestId: 0,  // 年度切り替えと重なったとき、古い応答で上書きしないための番号
+        // 各データをいつ取得したものか（0 = まだ無い）。保存データなら過去の時刻になる
+        savedAt: { ranking: 0, seasons: 0, city: 0 },
+
+        slowHint: false,      // 保存データが無く待たされているときに「混み合っています」を出す
+
         async init() {
-          this.loading = true;
           this.loadError = '';
+          this.refreshError = '';
+
+          // ① 前回表示したデータが端末に残っていれば、GASを待たずにすぐ表示する
+          const cachedRanking = readGasCache('getRanking');
+          const cachedSeasons = readGasCache('getSeasons');
+          const cachedCity    = readGasCache('getCity');
+          if (cachedRanking && cachedSeasons && cachedCity) {
+            this.applyData(
+              { ranking: cachedRanking.data, seasons: cachedSeasons.data, city: cachedCity.data },
+              { ranking: cachedRanking.savedAt, seasons: cachedSeasons.savedAt, city: cachedCity.savedAt },
+            );
+            this.loading = false;
+          } else {
+            this.loading = true;
+          }
+
+          // 保存データが無いと表の代わりにスピナーだけになるので、長引いたら混雑中だと伝える
+          this.slowHint = false;
+          const hintTimer = setTimeout(() => { if (this.loading) this.slowHint = true; }, 8000);
+
+          // ② 裏で最新を取りに行き、届いたものから差し替える
+          await this.refresh();
+          clearTimeout(hintTimer);
+          this.slowHint = false;
+        },
+
+        async refresh() {
+          const rankingParams = this.rankingParamsFor(this.currentLeagueYear);
+          const requestId = ++this.rankingRequestId;
+          this.refreshError = '';
+          this.pending++;
+
           // getRanking はメンバー一覧も兼ねる（全メンバーを0ptでも返す）ので getMembers は呼ばない
           const [rRes, sRes, cRes] = await Promise.allSettled([
-            gasGet('getRanking'),
+            gasGet('getRanking', rankingParams),
             gasGet('getSeasons'),
             gasGet('getCity'),
           ]);
-          if (rRes.status === 'fulfilled') this.ranking = rRes.value;
-          if (sRes.status === 'fulfilled') this.seasons = sRes.value;
-          if (cRes.status === 'fulfilled') this.city = cRes.value;
+          this.pending--;
 
-          if (rRes.status === 'rejected' || sRes.status === 'rejected' || cRes.status === 'rejected') {
-            this.loadError = 'データの取得に失敗しました。通信状況を確認して再読み込みしてください。';
-            this.loading = false;
-            return;
+          // 待っている間に年度が切り替えられていたら、このランキングは使わない
+          const rankingCurrent = requestId === this.rankingRequestId;
+          const now = Date.now();
+          const fresh = {}, at = {};
+          if (rankingCurrent && rRes.status === 'fulfilled') { fresh.ranking = rRes.value; at.ranking = now; }
+          if (sRes.status === 'fulfilled') { fresh.seasons = sRes.value; at.seasons = now; }
+          if (cRes.status === 'fulfilled') { fresh.city = cRes.value; at.city = now; }
+          this.applyData(fresh, at);
+
+          const failed = [rankingCurrent ? rRes : null, sRes, cRes].find(r => r && r.status === 'rejected');
+          if (failed) {
+            if (this.hasData) {
+              this.refreshError = `最新データを取得できませんでした（${formatCacheAge(this.oldestSavedAt)}のデータを表示中）。${failed.reason.message}`;
+            } else {
+              this.loadError = failed.reason.message || 'データの取得に失敗しました。';
+            }
           }
+          this.loading = false;
+        },
+
+        // 取得したデータを反映する。ユーザーが選んでいた年度・シーズンは、新しいデータにも存在する限り維持する
+        applyData(data, at) {
+          if (data.ranking) { this.ranking = data.ranking; this.savedAt.ranking = at.ranking; }
+          if (data.seasons) { this.seasons = data.seasons; this.savedAt.seasons = at.seasons; }
+          if (data.city)    { this.city    = data.city;    this.savedAt.city    = at.city; }
 
           this.leagueYears = [...new Set(this.seasons.map(s => s.league_year).filter(Boolean))].sort();
-          if (this.leagueYears.length > 0) {
-            this.currentLeagueYear = this.leagueYears[this.leagueYears.length - 1];
+          if (!this.leagueYears.includes(this.currentLeagueYear)) {
+            this.currentLeagueYear = this.leagueYears.length > 0 ? this.leagueYears[this.leagueYears.length - 1] : '';
           }
-          this.pickFirstSeason();
-          this.loading = false;
+          if (!this.yearSeasons.some(s => String(s.id) === String(this.currentSeasonId))) {
+            this.pickFirstSeason();
+          }
+        },
+
+        get hasData() {
+          return this.savedAt.ranking > 0 && this.savedAt.seasons > 0 && this.savedAt.city > 0;
+        },
+
+        get oldestSavedAt() {
+          return Math.min(this.savedAt.ranking, this.savedAt.seasons, this.savedAt.city);
+        },
+
+        get refreshing() {
+          return this.pending > 0;
+        },
+
+        // 最新年度はパラメータ無し（サーバー側の既定＝最新年度）で呼び、初回表示と保存データを共有する
+        rankingParamsFor(year) {
+          const latest = this.leagueYears[this.leagueYears.length - 1];
+          return (!year || year === latest) ? {} : { league_year: year };
         },
 
         // 年度を切り替えるとCSP集計の対象年度も変わるので、ランキングを取り直す
@@ -299,10 +391,25 @@
           this.currentLeagueYear = year;
           this.openId = null;
           this.pickFirstSeason();
+
+          const params = this.rankingParamsFor(year);
+          const requestId = ++this.rankingRequestId;
+          const cached = readGasCache('getRanking', params);
+          if (cached) { this.ranking = cached.data; this.savedAt.ranking = cached.savedAt; }
+
+          this.refreshError = '';
+          this.pending++;
           try {
-            this.ranking = await gasGet('getRanking', { league_year: year });
+            const fresh = await gasGet('getRanking', params);
+            if (requestId === this.rankingRequestId) { this.ranking = fresh; this.savedAt.ranking = Date.now(); }
           } catch (e) {
-            this.loadError = 'CSPの取得に失敗しました: ' + e.message;
+            if (requestId === this.rankingRequestId) {
+              this.refreshError = cached
+                ? `最新のCSPを取得できませんでした（${formatCacheAge(cached.savedAt)}のデータを表示中）。${e.message}`
+                : 'CSPの取得に失敗しました: ' + e.message;
+            }
+          } finally {
+            this.pending--;
           }
         },
 

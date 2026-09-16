@@ -62,12 +62,35 @@
           </template>
         </div>
 
+        <!-- 保存データを表示しながら最新を取得している間／最新の取得に失敗したときの案内 -->
+        <div x-show="!loading && !loadError && (refreshing || refreshError)" x-cloak
+          class="mb-4 px-3 py-2 rounded-lg text-xs flex items-center gap-2"
+          :style="refreshError
+            ? 'background-color:#2d0a0a; color:#fca5a5; border:1px solid #7f1d1d;'
+            : 'background-color:#0f1629; color:#94a3b8; border:1px solid #1e2a4a;'">
+          <svg x-show="refreshing" class="animate-spin w-3.5 h-3.5 flex-shrink-0" style="color:#fbbf24;" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          <span x-text="refreshError || ('最新データを取得中…（' + formatCacheAge(dataSavedAt) + 'のデータを表示中）')"></span>
+          <button x-show="refreshError && !refreshing" x-cloak @click="loadDetail()"
+            class="ml-auto flex-shrink-0 px-2 py-0.5 rounded font-bold" style="background-color:#1e2a4a; color:#e2e8f0;">再取得</button>
+        </div>
+
+        <!-- 取得に失敗し、表示できるデータも無いとき（以前は何も表示されず真っ白だった） -->
+        <div x-show="!loading && loadError" x-cloak class="rounded-xl p-6 text-center"
+          style="background-color:#161e3a; border:1px solid #7f1d1d;">
+          <p class="text-sm" style="color:#f87171;" x-text="loadError"></p>
+          <button @click="loadDetail()" class="mt-4 text-sm px-4 py-2 rounded-lg"
+            style="background-color:#1e2a4a; color:#94a3b8;">再読み込み</button>
+        </div>
+
         <!-- ローディング -->
         <div x-show="loading" class="flex flex-col items-center justify-center py-16 gap-4">
           <svg class="animate-spin w-10 h-10" style="color:#dc2626;" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
           </svg>
+          <span x-show="slowHint" x-cloak class="text-xs text-center px-6" style="color:#64748b;">
+            サーバーが混み合っています。表示まで最大45秒ほどかかることがあります。<br>次回からは前回のデータをすぐに表示します。
+          </span>
         </div>
 
         <template x-if="!loading && detail">
@@ -258,7 +281,27 @@
             </svg>
           </div>
 
-          <div x-show="!loading && members.length === 0" x-cloak class="text-center py-12">
+          <!-- 保存データを表示しながら最新を取得している間／最新の取得に失敗したときの案内 -->
+          <div x-show="!loading && members.length > 0 && (refreshing || refreshError)" x-cloak
+            class="mb-3 px-3 py-2 rounded-lg text-xs flex items-center gap-2"
+            :style="refreshError
+              ? 'background-color:#2d0a0a; color:#fca5a5; border:1px solid #7f1d1d;'
+              : 'background-color:#0f1629; color:#94a3b8; border:1px solid #1e2a4a;'">
+            <svg x-show="refreshing" class="animate-spin w-3.5 h-3.5 flex-shrink-0" style="color:#fbbf24;" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <span x-text="refreshError || ('最新の一覧を取得中…（' + formatCacheAge(dataSavedAt) + 'のデータを表示中）')"></span>
+            <button x-show="refreshError && !refreshing" x-cloak @click="fetchMembers()"
+              class="ml-auto flex-shrink-0 px-2 py-0.5 rounded font-bold" style="background-color:#1e2a4a; color:#e2e8f0;">再取得</button>
+          </div>
+
+          <!-- 取得に失敗し、表示できるデータも無いとき（以前は「メンバーがいません」と誤表示していた） -->
+          <div x-show="!loading && loadError" x-cloak class="rounded-xl p-6 text-center"
+            style="background-color:#161e3a; border:1px solid #7f1d1d;">
+            <p class="text-sm" style="color:#f87171;" x-text="loadError"></p>
+            <button @click="fetchMembers()" class="mt-4 text-sm px-4 py-2 rounded-lg"
+              style="background-color:#1e2a4a; color:#94a3b8;">再読み込み</button>
+          </div>
+
+          <div x-show="!loading && !loadError && members.length === 0" x-cloak class="text-center py-12">
             <p class="text-base" style="color:#94a3b8;">メンバーがいません</p>
           </div>
 
@@ -405,56 +448,128 @@
           { key: 'CL',  label: '🏆🎯 次回CL',  onStyle: 'background-color:#0369a1; color:#fff;' },
         ],
 
+        // ---- 通信状態（端末の保存データを先に表示し、裏で最新を取る） ----
+        memberId: '',
+        loadError: '',     // 保存データも無く、取得にも失敗したとき
+        refreshError: '',  // 最新の取得に失敗したが、保存データで表示は続けているとき
+        pending: 0,        // 裏で実行中の取得の数
+        requestId: 0,      // 年度切り替えと重なったとき、古い応答で上書きしないための番号
+        dataSavedAt: 0,    // 表示中のデータ（詳細 or 一覧）をいつ取得したか
+        slowHint: false,   // 保存データが無く待たされているときに「混み合っています」を出す
+
         async init() {
           const params = new URLSearchParams(window.location.search);
           const id = params.get('id');
           if (id) {
             this.mode = 'detail';
-            // 年度一覧を先に取得してタブを生成
-            try {
-              this.leagueYears = await gasGet('getLeagueYears');
-              if (this.leagueYears.length > 0) {
-                this.currentLeagueYear = this.leagueYears[this.leagueYears.length - 1];
-              }
-            } catch (e) {
-              console.error('年度一覧の取得に失敗しました:', e);
-            }
-            await this.fetchDetail(id);
+            this.memberId = id;
+            await this.loadDetail();
           } else {
             this.mode = 'register';
+            const cached = readGasCache('getMembers');
+            if (cached) {
+              this.setMembers(cached.data);
+              this.dataSavedAt = cached.savedAt;
+              this.loading = false;
+            }
             await this.fetchMembers();
           }
         },
 
+        get refreshing() {
+          return this.pending > 0;
+        },
+
+        // 最新年度はパラメータ無し（サーバー側の既定＝最新年度）で呼び、保存データを共有する
+        detailParams() {
+          const latest = this.leagueYears[this.leagueYears.length - 1];
+          return (!this.currentLeagueYear || this.currentLeagueYear === latest)
+            ? { id: this.memberId }
+            : { id: this.memberId, league_year: this.currentLeagueYear };
+        },
+
+        setLeagueYears(years) {
+          this.leagueYears = years;
+          if (!years.includes(this.currentLeagueYear)) {
+            this.currentLeagueYear = years.length > 0 ? years[years.length - 1] : '';
+          }
+        },
+
+        async loadDetail() {
+          this.loadError = '';
+          this.refreshError = '';
+          const requestId = ++this.requestId;
+
+          // ① 保存データがあれば先に表示する
+          const cachedYears = readGasCache('getLeagueYears');
+          if (cachedYears) this.setLeagueYears(cachedYears.data);
+          const detailParams = this.detailParams();
+          const cachedDetail = readGasCache('getMemberDetail', detailParams);
+          if (cachedDetail) {
+            this.detail = cachedDetail.data;
+            this.dataSavedAt = cachedDetail.savedAt;
+            this.loading = false;
+          } else {
+            this.loading = true;
+          }
+          this.slowHint = false;
+          const hintTimer = setTimeout(() => { if (this.loading) this.slowHint = true; }, 8000);
+
+          // ② 年度一覧と詳細を並行して取りに行く（以前は年度一覧を待ってから詳細を取っていた）
+          this.pending++;
+          const [yRes, dRes] = await Promise.allSettled([
+            gasGet('getLeagueYears'),
+            gasGet('getMemberDetail', detailParams),
+          ]);
+          this.pending--;
+          clearTimeout(hintTimer);
+          if (requestId !== this.requestId) return; // 待っている間に年度が切り替えられた
+          this.slowHint = false;
+
+          if (yRes.status === 'fulfilled') this.setLeagueYears(yRes.value);
+          else console.error('年度一覧の取得に失敗しました:', yRes.reason);
+
+          if (dRes.status === 'fulfilled') {
+            this.detail = dRes.value;
+            this.dataSavedAt = Date.now();
+          } else if (this.detail) {
+            this.refreshError = `最新データを取得できませんでした（${formatCacheAge(this.dataSavedAt)}のデータを表示中）。${dRes.reason.message}`;
+          } else {
+            this.loadError = dRes.reason.message || 'データの取得に失敗しました。';
+          }
+          this.loading = false;
+        },
+
         async selectYear(year) {
+          if (this.currentLeagueYear === year) return;
           this.currentLeagueYear = year;
-          const params = new URLSearchParams(window.location.search);
-          await this.fetchDetail(params.get('id'));
+          this.detail = null; // 別の年度のデータを見せ続けないようにする
+          await this.loadDetail();
         },
 
         async fetchMembers() {
-          this.loading = true;
+          this.loadError = '';
+          this.refreshError = '';
+          if (this.members.length === 0) this.loading = true;
+          this.pending++;
           try {
-            this.members = await gasGet('getMembers');
+            this.setMembers(await gasGet('getMembers'));
+            this.dataSavedAt = Date.now();
           } catch (e) {
-            console.error('メンバー取得エラー:', e);
+            if (this.members.length > 0) {
+              this.refreshError = `最新のメンバー一覧を取得できませんでした（${formatCacheAge(this.dataSavedAt)}のデータを表示中）。${e.message}`;
+            } else {
+              this.loadError = e.message || 'メンバー一覧の取得に失敗しました。';
+            }
           } finally {
+            this.pending--;
             this.loading = false;
           }
         },
 
-        async fetchDetail(id) {
-          this.loading = true;
-          try {
-            const params = { id };
-            // 年度が選択済みの場合はパラメータに追加
-            if (this.currentLeagueYear) params.league_year = this.currentLeagueYear;
-            this.detail = await gasGet('getMemberDetail', params);
-          } catch (e) {
-            console.error('詳細取得エラー:', e);
-          } finally {
-            this.loading = false;
-          }
+        // 中身が同じなら差し替えない（編集中・削除確認中のプルダウンの選択が外れないように）
+        setMembers(list) {
+          if (JSON.stringify(list) !== JSON.stringify(this.members)) this.members = list;
         },
 
         async register() {
